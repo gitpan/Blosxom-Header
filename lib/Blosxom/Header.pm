@@ -5,7 +5,7 @@ use warnings;
 use Carp;
 use HTTP::Status qw(status_message);
 
-our $VERSION = '0.01002';
+our $VERSION = '0.01004';
 
 sub new {
     my $self = shift;
@@ -15,7 +15,7 @@ sub new {
         return;
     }
 
-    return bless $blosxom::header, $self;
+    return bless { %$blosxom::header }, $self;
 }
 
 sub get {
@@ -46,18 +46,24 @@ sub set {
     my ($self, %headers) = @_;
 
     while (my ($key, $value) = each %headers) {
-        if ($key eq 'status' and $value =~ /^\d\d\d$/) {
+        if ($key eq 'status') {
             if (my $message = status_message($value)) {
-                $value .= " $message";
+                $value .= q{ } . $message;
             }
             else {
-                carp "Unknown status code: $value";
+                carp "Unknown status code: " . $value;
             }
         }
 
         $self->{"-$key"} = $value;
     }
 
+    return;
+}
+
+sub DESTROY {
+    my $self = shift;
+    %$blosxom::header = %$self;
     return;
 }
 

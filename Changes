@@ -1,4 +1,7 @@
-Revision history for Blosxom-Header
+Revision history for Perl extension Blosxom::Header.
 
-0.01002 - Jan 1st, 2012
-           * First version
+0.01004  Jan 2nd, 2012
+  - Added DESTORY method
+
+0.01002  Jan 1st, 2012
+  - First version

@@ -1,5 +1,5 @@
 use strict;
-use Test::More tests => 9;
+use Test::More tests => 8;
 use Blosxom::Header;
 
 {
@@ -12,38 +12,17 @@ use Blosxom::Header;
     };
 }
 
-my $header  = Blosxom::Header->new();
-my @methods = qw(new get exists remove set);
-
-isa_ok($header, 'Blosxom::Header');
-can_ok($header,  @methods);
-is_deeply($header, $blosxom::header);
-
-# Blosxom::Header->get()
 {
-    my $got      = $header->get('type');
-    my $expected = 'text/html;';
+    my $header  = Blosxom::Header->new();
+    my @methods = qw(new get exists remove set DESTROY);
 
-    is($got, $expected);
+    isa_ok($header, 'Blosxom::Header');
+    can_ok($header,  @methods);
+    is($header->get('type'), 'text/html;');
+    is($header->exists('type'), 1);
+    is($header->exists('content_length'), q{});
+    $header->set( 'content_length' => '1234' );
 }
-
-# Blosxom::Header->exists()
-{
-    my $got      = $header->exists('type');
-    my $expected = 1;
-
-    is($got, $expected);
-}
-
-{
-    my $got      = $header->exists('content_length');
-    my $expected = q{};
-
-    is($got, $expected);
-}
-
-# Blosxom::Header->set()
-$header->set( 'content_length' => '1234' );
 
 {
     my $expected = {
@@ -57,10 +36,13 @@ $header->set( 'content_length' => '1234' );
 }
 
 # override
-$header->set(
-    'type'   => 'text/plain;',
-    'status' => '404',
-);
+{
+    my $header = Blosxom::Header->new();
+    $header->set(
+        'type'   => 'text/plain;',
+        'status' => '404',
+    );
+}
 
 {
     my $expected = {
@@ -74,7 +56,10 @@ $header->set(
 }
 
 # Blosxom::Header->remove()
-$header->remove('cache_control', 'content_length');
+{
+    my $header = Blosxom::Header->new();
+    $header->remove('cache_control', 'content_length');
+}
 
 {
     my $expected = {
