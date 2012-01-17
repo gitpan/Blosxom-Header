@@ -1,68 +1,28 @@
-NAME
-
-    Blosxom::Header - Missing interface to modify HTTP headers
-
-SYNOPSIS
-
-        use Blosxom::Header;
-
-        my $header = Blosxom::Header->new();
-  
-        $header->set(
-            type          => 'text/html;',
-            status        => '304',
-            cache_control => 'must-revalidate',
-        );
-        my $value = $header->get('status');           # 304 Not Modified
-        my $bool  = $header->exists('cache_control'); # 1
-        my @keys  = $header->keys();                  # ('type', 'status', 'cache_control')
-
-        $header->remove('cache_control');
-        @keys = $header->keys(); # ('type', 'status')
-
-DESCRIPTION
-
-    Blosxom, a weblog application, exports a global variable $header
-    which is a reference to hash. This application passes $header CGI::header()
-    to generate HTTP headers.
-
-    When plugin writers modify HTTP headers, they must write as follows:
-
-        package foo;
-        $blosxom::header->{'-status'} = '304 Not Modified';
-
-    It's obviously bad practice. Blosxom misses the interface to modify
-    HTTP headers.  
-
-    This module allows you to modify them in an object-oriented way.
-    If loaded, you might write as follows:
-
-        my $header = Blosxom::Header->new();
-        $header->set('status' => '304');
+This is Perl module Blosxom::Header.
 
 INSTALLATION
 
-        % perl Makefile.PL
-        % make
-        % make test
+Blosxom::Header installation is straightforward.
+If your CPAN shell is set up, you should just be able to do
 
-DEPENDENCIES
+    % cpan Blosxom::Header
 
-    * Blosxom 2.1.2
-    * HTTP::Status
+Download it, unpack it, then build it as per the usual:
 
-AUTHOR
+    % perl Makefile.PL
+    % make && make test
 
-    Ryo Anazawa (r-anazawa@shochutairen.com)
+Then install it:
 
-LICENSE AND COPYRIGHT
+    % make install
 
-    Copyright (c) 2011 Ryo Anazawa. All rights reserved.
+DOCUMENTATION
 
-    This module is free software; you can redistribute it and/or
-    modify it under the same terms as Perl itself. See L<perlartistic>.
+Blosxom::Header documentation is available as in POD.
+So you can do:
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    % perldoc Blosxom::Header
 
+to read the documentation online with your favorite pager.
+
+Ryo Anazawa

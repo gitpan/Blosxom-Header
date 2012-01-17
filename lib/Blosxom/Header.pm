@@ -1,69 +1,72 @@
 package Blosxom::Header;
-
 use strict;
 use warnings;
 use Carp;
 use HTTP::Status qw(status_message);
 
-our $VERSION = '0.01004';
+our $VERSION = '0.01006';
 
 sub new {
-    my $self = shift;
+    my $class   = shift;
+    my %headers = @_;
 
     if (!$blosxom::header) {
-        carp q{$blosxom::header haven't been initialized yet.};
+        carp q{$blosxom::header hasn't been initialized yet.};
         return;
     }
 
-    return bless { %$blosxom::header }, $self;
-}
+    if (!%headers) {
+        while (my ($key, $value) = each %$blosxom::header) {
+            $key =~ s{^-}{};
+            $key = 'Content-Type' if $key eq 'type';
+            $headers{$key} = $value;
+        }
+    }
 
-sub get {
-    my $self = shift;
-    my $key  = shift;
-
-    return $self->{"-$key"};
-}
-
-sub exists {
-    my $self = shift;
-    my $key  = shift;
-
-    return exists $self->{"-$key"};
+    return bless \%headers, $class;
 }
 
 sub remove {
-    my ($self, @keys) = @_;
+    my $self = shift;
+    my @keys = @_;
 
     for my $key (@keys) {
-        delete $self->{"-$key"};
+        delete $self->{$key};
     }
 
     return;
 }
 
 sub set {
-    my ($self, %headers) = @_;
+    my $self    = shift;
+    my %headers = @_;
 
     while (my ($key, $value) = each %headers) {
-        if ($key eq 'status') {
-            if (my $message = status_message($value)) {
-                $value .= q{ } . $message;
-            }
-            else {
-                carp "Unknown status code: " . $value;
-            }
-        }
-
-        $self->{"-$key"} = $value;
+        $self->{$key} = $value;
     }
 
     return;
 }
 
 sub DESTROY {
-    my $self = shift;
-    %$blosxom::header = %$self;
+    my $self    = shift;
+    my %headers = ();
+
+    while (my ($key, $value) = each %$self) {
+        if ($key eq 'Status' and $value =~ /^\d\d\d$/) {
+            if (my $message = status_message($value)) {
+                $value .= q{ } . $message;
+            }
+            else {
+                carp 'Unknown status code: ' . $value;
+            }
+        }
+
+        $headers{'-'.$key} = $value;
+    }
+
+    %$blosxom::header = %headers;
+
     return;
 }
 
@@ -79,16 +82,19 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
   use Blosxom::Header;
 
-  my $header = Blosxom::Header->new();
-  
+  # OO interface
+  my $header = Blosxom::Header->new('Content-Type' => 'text/html');
   $header->set(
-    type          => 'text/html;',
-    status        => '304',
-    cache_control => 'must-revalidate',
+    'Status'        => '304',
+    'Cache-Control' => 'must-revalidate',
   );
-  my $value = $header->get('status');           # 304 Not Modified
-  my $bool  = $header->exists('cache_control'); # 1
-  $header->remove('cache_control');
+  $header->remove('Cache-Control', 'Status');
+
+  # As a reference to hash
+  $header->{'Content-Type'} = 'text/plain';
+  my $value = $header->{'Content-Type'};        # text/plain
+  my $bool  = exists $header->{'Content-Type'}; # 1
+  delete $header->{'Content-Type'};
 
 =head1 DESCRIPTION
 
@@ -99,16 +105,16 @@ to generate HTTP headers.
 When plugin writers modify HTTP headers, they must write as follows:
 
   package foo;
-  $blosxom::header->{'-status'} = '304 Not Modified';
+  $blosxom::header->{'-Status'} = '304 Not Modified';
 
 It's obviously bad practice. Blosxom misses the interface to modify
-HTTP headers.  
+them.  
 
 This module allows you to modify them in an object-oriented way.
 If loaded, you might write as follows:
 
   my $header = Blosxom::Header->new();
-  $header->set('status' => '304');
+  $header->{'Status'} = '304'; # will be autocompleted as '304 Not Modified'
 
 =head1 METHODS
 
@@ -116,16 +122,11 @@ If loaded, you might write as follows:
 
 =item $header = Blosxom::Header->new();
 
+=item $header = Blosxom::Header->new(%headers);
+
 Creates a new Blosxom::Header object.
-
-=item $header->get('foo')
-
-Returns a value of the specified HTTP header.
-
-=item $header->exists('foo')
-
-Returns a Boolean value telling whether the specified HTTP header
-has a value.
+If %headers were defined, existing headers would be overridden with
+them.
 
 =item $header->remove('foo', 'bar')
 
@@ -141,15 +142,14 @@ Set values of the specified HTTP headers.
 
 =over 4
 
-=item $blosxom::header haven't been initialized yet.
+=item $blosxom::header hasn't been initialized yet.
 
 You can't modify HTTP headers until Blosxom initializes $blosxom::header. 
 
 =item Unknown status code
 
-The specified status code doesn't match any status codes defined by RFC2616.
-
-  $header->set('status' => '123') # Unknown status code: 123
+The specified status code doesn't match any status codes defined
+by RFC2616.
 
 =back
 
@@ -159,7 +159,7 @@ L<HTTP::Status>, Blosxom 2.1.2
 
 =head1 AUTHOR
 
-Ryo Anazawa (r-anazawa@shochutairen.com)
+Ryo Anazawa (anazawa@cpan.org)
 
 =head1 LICENSE AND COPYRIGHT
 

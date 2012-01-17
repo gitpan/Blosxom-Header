@@ -6,67 +6,48 @@ use Blosxom::Header;
     package blosxom;
 
     our $header = {
-        -type          => 'text/html;',
-        -status        => '304 Not Modified',
-        -cache_control => 'must-revalidate',
+        -type => 'text/html',
     };
 }
 
 {
-    my $header  = Blosxom::Header->new();
-    my @methods = qw(new get exists remove set DESTROY);
+    my $header = Blosxom::Header->new();
 
     isa_ok($header, 'Blosxom::Header');
-    can_ok($header,  @methods);
-    is($header->get('type'), 'text/html;');
-    is($header->exists('type'), 1);
-    is($header->exists('content_length'), q{});
-    $header->set( 'content_length' => '1234' );
+    can_ok($header, qw/new remove set DESTROY/);
+    is_deeply($header, {'Content-Type' => 'text/html'});
+
+    $header->{'Content-Length'} = '1234';
 }
 
-{
-    my $expected = {
-        -type           => 'text/html;',
-        -status         => '304 Not Modified',
-        -cache_control  => 'must-revalidate',
-        -content_length => '1234',
-    };
-
-    is_deeply($blosxom::header, $expected);
-}
+is_deeply($blosxom::header, {
+    '-Content-Type'   => 'text/html',
+    '-Content-Length' => '1234',
+});
 
 # override
 {
     my $header = Blosxom::Header->new();
-    $header->set(
-        'type'   => 'text/plain;',
-        'status' => '404',
-    );
+    $header->{'Content-Type'} = 'text/plain';
+
+    is_deeply($header, {
+        'Content-Type'   => 'text/plain',
+        'Content-Length' => '1234',
+    });
 }
 
-{
-    my $expected = {
-        -type           => 'text/plain;',
-        -status         => '404 Not Found',
-        -cache_control  => 'must-revalidate',
-        -content_length => '1234',
-    };
+is_deeply($blosxom::header, {
+    '-Content-Type'   => 'text/plain',
+    '-Content-Length' => '1234',
+});
 
-    is_deeply($blosxom::header, $expected);
-}
-
-# Blosxom::Header->remove()
 {
     my $header = Blosxom::Header->new();
-    $header->remove('cache_control', 'content_length');
+    delete $header->{'Content-Length'};
+
+    is_deeply($header, {'Content-Type' => 'text/plain'});
 }
 
-{
-    my $expected = {
-        -type   => 'text/plain;',
-        -status => '404 Not Found',
-    };
-
-    is_deeply($blosxom::header, $expected);
-}
-
+is_deeply($blosxom::header, {
+    '-Content-Type' => 'text/plain',
+});

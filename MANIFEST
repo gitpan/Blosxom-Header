@@ -15,4 +15,7 @@ META.yml
 README
 t/00_compile.t
 t/01_basic.t
-t/02_warning.t
+t/02_new.t
+t/03_set.t
+t/04_status.t
+t/05_cgi_header.t
