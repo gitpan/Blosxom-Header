@@ -1,73 +1,79 @@
 package Blosxom::Header;
 use strict;
 use warnings;
-use Carp;
-use HTTP::Status qw(status_message);
+use base 'Exporter';
 
-our $VERSION = '0.01006';
+our $VERSION   = '0.01007';
+our @EXPORT_OK = qw(headers);
 
 sub new {
     my $class   = shift;
-    my %headers = @_;
+    my $headers = shift;
 
-    if (!$blosxom::header) {
-        carp q{$blosxom::header hasn't been initialized yet.};
-        return;
+    return bless { headers => $headers }, $class;
+}
+
+sub headers { __PACKAGE__->new(@_) }
+
+sub get {
+    my $self    = shift;
+    my $key     = _lc(shift);
+    my $headers = $self->{headers};
+
+    my $value;
+    if ($key and exists $headers->{$key}) {
+        $value = $headers->{$key};
     }
 
-    if (!%headers) {
-        while (my ($key, $value) = each %$blosxom::header) {
-            $key =~ s{^-}{};
-            $key = 'Content-Type' if $key eq 'type';
-            $headers{$key} = $value;
-        }
-    }
-
-    return bless \%headers, $class;
+    return $value;
 }
 
 sub remove {
-    my $self = shift;
-    my @keys = @_;
+    my $self    = shift;
+    my $key     = _lc(shift);
+    my $headers = $self->{headers};
 
-    for my $key (@keys) {
-        delete $self->{$key};
+    if ($key and exists $headers->{$key}) {
+        delete $headers->{$key};
     }
 
     return;
 }
 
 sub set {
-    my $self    = shift;
-    my %headers = @_;
+    my $self  = shift;
+    my $key   = _lc(shift);
+    my $value = shift;
 
-    while (my ($key, $value) = each %headers) {
-        $self->{$key} = $value;
+    if ($key) {
+        $self->{headers}->{$key} = $value;
     }
 
     return;
 }
 
-sub DESTROY {
-    my $self    = shift;
-    my %headers = ();
+sub exists {
+    my $self = shift;
+    my $key  = _lc(shift);
 
-    while (my ($key, $value) = each %$self) {
-        if ($key eq 'Status' and $value =~ /^\d\d\d$/) {
-            if (my $message = status_message($value)) {
-                $value .= q{ } . $message;
-            }
-            else {
-                carp 'Unknown status code: ' . $value;
-            }
-        }
-
-        $headers{'-'.$key} = $value;
+    my $exists;
+    if ($key) {
+        $exists = exists $self->{headers}->{$key};
     }
 
-    %$blosxom::header = %headers;
+    return $exists;
+}
 
-    return;
+sub _lc {
+    my $key = shift;
+
+    my $new_key;
+    if ($key) {
+        $key = lc $key;
+        $new_key = $key eq 'content-type' ? '-type' :"-$key";
+    }
+
+    return $new_key;
 }
 
 1;
@@ -80,21 +86,18 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
 =head1 SYNOPSIS
 
-  use Blosxom::Header;
+  use Blosxom::Header qw(headers);
 
-  # OO interface
-  my $header = Blosxom::Header->new('Content-Type' => 'text/html');
-  $header->set(
-    'Status'        => '304',
-    'Cache-Control' => 'must-revalidate',
-  );
-  $header->remove('Cache-Control', 'Status');
+  my $headers = { -type => 'text/html' };
 
-  # As a reference to hash
-  $header->{'Content-Type'} = 'text/plain';
-  my $value = $header->{'Content-Type'};        # text/plain
-  my $bool  = exists $header->{'Content-Type'}; # 1
-  delete $header->{'Content-Type'};
+  my $h = headers($headers);
+  my $value = $h->get($key);
+  my $bool = $h->exists($key);
+
+  $h->set($key, $value); # overwrites existent header
+  $h->remove($key);
+
+  $h->{headers}; # same reference as $headers
 
 =head1 DESCRIPTION
 
@@ -105,7 +108,7 @@ to generate HTTP headers.
 When plugin writers modify HTTP headers, they must write as follows:
 
   package foo;
-  $blosxom::header->{'-Status'} = '304 Not Modified';
+  $blosxom::header->{'-type'} = 'text/plain';
 
 It's obviously bad practice. Blosxom misses the interface to modify
 them.  
@@ -113,49 +116,58 @@ them.
 This module allows you to modify them in an object-oriented way.
 If loaded, you might write as follows:
 
-  my $header = Blosxom::Header->new();
-  $header->{'Status'} = '304'; # will be autocompleted as '304 Not Modified'
+  my $h = headers($blosxom::header);
+  $h->set('Content-Type' => 'text/plain');
 
-=head1 METHODS
+=head2 METHODS
 
 =over 4
 
-=item $header = Blosxom::Header->new();
+=item $h = Blosxom::Header->new($headers);
 
-=item $header = Blosxom::Header->new(%headers);
+=item $h = headers($headers);
 
 Creates a new Blosxom::Header object.
-If %headers were defined, existing headers would be overridden with
-them.
+The object holds a reference to the original given $headers argument.
 
-=item $header->remove('foo', 'bar')
+=item $h->get('foo')
 
-Deletes the specified elements from HTTP headers.
+Returns a value of the specified HTTP header.
 
-=item $header->set(%headers)
+=item $h->exists('foo')
 
-Set values of the specified HTTP headers.
+Returns a Boolean value telling whether the specified HTTP header exists.
 
-=back
+=item $h->set('foo' => 'bar')
 
-=head1 DIAGNOSTICS
+Sets a value of the specified HTTP header.
 
-=over 4
+=item $h->remove('foo')
 
-=item $blosxom::header hasn't been initialized yet.
-
-You can't modify HTTP headers until Blosxom initializes $blosxom::header. 
-
-=item Unknown status code
-
-The specified status code doesn't match any status codes defined
-by RFC2616.
+Deletes the specified element from HTTP headers.
 
 =back
+
+=head1 EXAMPLES
+
+  # plugins/content_length
+  package content_length;
+  use Blosxom::Header qw(headers);
+
+  sub start { 1 }
+
+  sub last {
+      my $h = headers($blosxom::header);
+      $h->set('Content-Length' => length $blosxom::output);
+  }
 
 =head1 DEPENDENCIES
 
-L<HTTP::Status>, Blosxom 2.1.2
+L<Blosxom 2.1.2|http://blosxom.sourceforge.net/>
+
+=head1 SEE ALSO
+
+The interface of this module is inspired by L<Plack::Util>.
 
 =head1 AUTHOR
 
