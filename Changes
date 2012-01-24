@@ -1,5 +1,8 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.01008  Jan 15th, 2012
+ - Removed @EXPORT_OK
+
 0.01007  Jan 18th, 2012
   - Modified interface
 
