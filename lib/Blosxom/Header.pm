@@ -2,7 +2,7 @@ package Blosxom::Header;
 use strict;
 use warnings;
 
-our $VERSION   = '0.01008';
+our $VERSION   = '0.01009';
 
 sub new {
     my $class   = shift;
@@ -144,17 +144,57 @@ Deletes the specified element from HTTP headers.
 
 =head1 EXAMPLES
 
-  # plugins/content_length
-  package content_length;
+  # plugins/conditional_get
+  package conditional_get;
+  use strict;
+  use warnings;
   use Blosxom::Header;
 
-  sub start {
-      return $blosxom::static_or_dynamic eq 'dynamic' ? 1 : 0;
-  }
+  sub start { !$blosxom::static_entries }
 
   sub last {
+      return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
+
       my $h = Blosxom::Header->new($blosxom::header);
-      $h->set('Content-Length' => length $blosxom::output);
+      if (_etag_matches($h) or _not_modified_since($h)) {
+          $h->set('Status' => '304 Not Modified');
+          $h->remove($_)
+              for qw(Content-Type Content-Length Content-Disposition);
+
+          # Truncate output
+          $blosxom::output = q{};
+      }
+  }
+
+  sub _etag_matches {
+      my $h = shift;
+
+      my $bool;
+      if ($h->exists('ETag')) {
+          $bool = $h->get('ETag') eq _value($ENV{HTTP_IF_NONE_MATCH});
+      }
+    
+      return $bool;
+  }
+
+  sub _not_modified_since {
+      my $h = shift;
+
+      my $bool;
+      if ($h->exists('Last-Modified')) {
+          $bool = $h->get('Last-Modified')
+                      eq _value($ENV{HTTP_IF_MODIFIED_SINCE});
+      }
+
+      return $bool;
+  }
+
+  # IE sends wrong formatted value
+  # i.e. "Thu, 03 Dec 2009 01:46:32 GMT; length=17936"
+  sub _value {
+      my $str = shift;
+      $str =~ s{;.*$}{};
+      return $str;
   }
 
 =head1 DEPENDENCIES
@@ -163,7 +203,7 @@ L<Blosxom 2.1.2|http://blosxom.sourceforge.net/>
 
 =head1 SEE ALSO
 
-The interface of this module is inspired by L<Plack::Util>.
+The interface of this module is inspired by L<Plack::Util>::headers.
 
 =head1 AUTHOR
 
