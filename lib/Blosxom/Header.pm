@@ -2,13 +2,13 @@ package Blosxom::Header;
 use strict;
 use warnings;
 
-our $VERSION   = '0.01009';
+our $VERSION = '0.01010';
 
 sub new {
     my $class   = shift;
     my $headers = shift;
 
-    return bless { headers => $headers }, $class;
+    bless { headers => $headers }, $class;
 }
 
 sub get {
@@ -16,12 +16,7 @@ sub get {
     my $key     = _lc(shift);
     my $headers = $self->{headers};
 
-    my $value;
-    if ($key and exists $headers->{$key}) {
-        $value = $headers->{$key};
-    }
-
-    return $value;
+    $key and exists $headers->{$key} and $headers->{$key};
 }
 
 sub remove {
@@ -52,24 +47,12 @@ sub exists {
     my $self = shift;
     my $key  = _lc(shift);
 
-    my $exists;
-    if ($key) {
-        $exists = exists $self->{headers}{$key};
-    }
-
-    return $exists;
+    $key and exists $self->{headers}{$key};
 }
 
 sub _lc {
-    my $key = shift;
-
-    my $new_key;
-    if ($key) {
-        $key = lc $key;
-        $new_key = $key eq 'content-type' ? '-type' :"-$key";
-    }
-
-    return $new_key;
+    my $key = $_[0] ? lc shift : undef;
+    $key and ($key eq 'content-type' ? '-type' : "-$key");
 }
 
 1;
@@ -144,7 +127,12 @@ Deletes the specified element from HTTP headers.
 
 =head1 EXAMPLES
 
-  # plugins/conditional_get
+The following code is a Blosxom plugin to enable conditional GET and HEAD using
+C<If-None-Match> and C<If-Modified-Since> headers.
+Refer to L<Plack::Middleware::ConditionalGET>.
+
+plugins/conditional_get:
+
   package conditional_get;
   use strict;
   use warnings;
@@ -164,38 +152,29 @@ Deletes the specified element from HTTP headers.
           # Truncate output
           $blosxom::output = q{};
       }
+
+      return;
   }
 
   sub _etag_matches {
       my $h = shift;
-
-      my $bool;
-      if ($h->exists('ETag')) {
-          $bool = $h->get('ETag') eq _value($ENV{HTTP_IF_NONE_MATCH});
-      }
-    
-      return $bool;
+      return unless $h->exists('ETag');
+      $h->get('ETag') eq _value($ENV{HTTP_IF_NONE_MATCH});
   }
 
   sub _not_modified_since {
       my $h = shift;
-
-      my $bool;
-      if ($h->exists('Last-Modified')) {
-          $bool = $h->get('Last-Modified')
-                      eq _value($ENV{HTTP_IF_MODIFIED_SINCE});
-      }
-
-      return $bool;
+      return unless $h->exists('Last-Modified');
+      $h->exists('Last-Modified') eq _value($ENV{HTTP_IF_MODIFIED_SINCE});
   }
 
-  # IE sends wrong formatted value
-  # i.e. "Thu, 03 Dec 2009 01:46:32 GMT; length=17936"
   sub _value {
       my $str = shift;
       $str =~ s{;.*$}{};
-      return $str;
+      $str;
   }
+  
+  1;
 
 =head1 DEPENDENCIES
 
@@ -220,3 +199,4 @@ This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
+=cut

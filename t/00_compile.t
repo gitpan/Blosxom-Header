@@ -1,7 +1,8 @@
 use strict;
-use Test::More tests => 1;
+use Test::More;
 
 BEGIN {
     use_ok 'Blosxom::Header';
 }
 
+done_testing;

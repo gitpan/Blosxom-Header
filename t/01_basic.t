@@ -3,12 +3,11 @@ use Test::More;
 use Blosxom::Header;
 
 {
-    my $headers = { '-foo' => 'bar' };
-
+    my $headers = {};
     my $h = Blosxom::Header->new($headers);
 
     isa_ok $h, 'Blosxom::Header';
-    can_ok $h, qw(get set remove exists);
+    can_ok $h, qw(new get set remove exists);
     is_deeply $h, { headers => $headers };
 }
 
