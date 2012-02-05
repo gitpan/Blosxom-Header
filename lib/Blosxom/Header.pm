@@ -2,7 +2,7 @@ package Blosxom::Header;
 use strict;
 use warnings;
 
-our $VERSION = '0.01010';
+our $VERSION = '0.01011';
 
 sub new {
     my $class   = shift;
@@ -16,29 +16,27 @@ sub get {
     my $key     = _lc(shift);
     my $headers = $self->{headers};
 
-    $key and exists $headers->{$key} and $headers->{$key};
-}
+    my @keys   = grep { $key eq _lc($_) } keys %$headers;
+    my @values = @{$headers}{@keys};
 
-sub remove {
-    my $self    = shift;
-    my $key     = _lc(shift);
-    my $headers = $self->{headers};
-
-    if ($key and exists $headers->{$key}) {
-        delete $headers->{$key};
-    }
-
-    return;
+    wantarray ? @values : $values[0];
 }
 
 sub set {
-    my $self  = shift;
-    my $key   = _lc(shift);
-    my $value = shift;
+    my $self    = shift;
+    my $key     = shift;
+    my $value   = shift;
+    my $headers = $self->{headers};
 
-    if ($key) {
-        $self->{headers}{$key} = $value;
-    }
+    my $set;
+    for (keys %$headers) {
+        next unless _lc($key) eq _lc($_);
+        $headers->{$_} = $value;
+        $set++;
+        last;
+    } 
+
+    $headers->{$key} = $value unless $set;
 
     return;
 }
@@ -47,12 +45,47 @@ sub exists {
     my $self = shift;
     my $key  = _lc(shift);
 
-    $key and exists $self->{headers}{$key};
+    for (keys %{$self->{headers}}) {
+        return 1 if _lc($_) eq $key; # any
+    } 
+
+    return;
+}
+
+sub remove {
+    my $self    = shift;
+    my $key     = _lc(shift);
+    my $headers = $self->{headers};
+
+    my @keys = grep { _lc($_) eq $key } keys %$headers;
+    delete @{$headers}{@keys};
+
+    return;
 }
 
 sub _lc {
-    my $key = $_[0] ? lc shift : undef;
-    $key and ($key eq 'content-type' ? '-type' : "-$key");
+    my $key = lc shift;
+    $key =~ s{^\-}{};
+    $key;
+}
+
+# Accessors
+for my $field (qw(type nph expires cookie charset attachment p3p)) {
+    my $slot = __PACKAGE__ . "::$field";
+    my $code = sub {
+        my $self  = shift;
+        my $value = shift;
+
+        if (defined $value) {
+            $self->set($field => $value);
+        }
+        else {
+            $self->get($field);
+        }
+    };
+
+    no strict 'refs';
+    *$slot = $code;
 }
 
 1;
@@ -78,13 +111,22 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
   $h->{headers}; # same reference as $headers
 
+  # Accessors
+  $h->type('text/plain');
+  $h->nph(1);
+  $h->expires('+1d');
+  $h->cookie('foo=bar');
+  $h->charset('utf-8');
+  $h->attachment('foo.png');
+  $h->p3p('foo');
+
 =head1 DESCRIPTION
 
 Blosxom, a weblog application, exports a global variable $header
-which is a reference to hash. This application passes $header CGI::header()
+which is a reference to hash. This application passes $header L<CGI>::header()
 to generate HTTP headers.
 
-When plugin writers modify HTTP headers, they must write as follows:
+When plugin developers modify HTTP headers, they must write as follows:
 
   package foo;
   $blosxom::header->{'-type'} = 'text/plain';
@@ -92,11 +134,10 @@ When plugin writers modify HTTP headers, they must write as follows:
 It's obviously bad practice. Blosxom misses the interface to modify
 them.  
 
-This module allows you to modify them in an object-oriented way.
-If loaded, you might write as follows:
+This module allows you to modify them in an object-oriented way:
 
   my $h = Blosxom::Header->new($blosxom::header);
-  $h->set('Content-Type' => 'text/plain');
+  $h->type('text/plain');
 
 =head2 METHODS
 
@@ -125,6 +166,84 @@ Deletes the specified element from HTTP headers.
 
 =back
 
+=head3 ACCESSORS
+
+Refer to L<CGI>::header.
+
+=over 4
+
+=item $h->type()
+
+Gets or sets the Content-Type header.
+
+  $h->type('text/plain')
+
+=item $h->nph()
+
+Gets or sets a Boolean value telling whether to issue the correct
+headers to work with a NPH (no-parse-header) script.
+
+  $h->nph(1)
+
+=item $h->expires()
+
+Gets or sets the Expires header.
+You can specify an absolute or relative expiration interval.
+The following forms are all valid for this field.
+
+  $h->expires('+30s') # 30 seconds from now
+  $h->expires('+10m') # ten minutes from now
+  $h->expires('+1h')  # one hour from now
+  $h->expires('-1d')  # yesterday
+  $h->expires('now')  # immediately
+  $h->expires('+3M')  # in three months
+  $h->expires('+10y') # in ten years time
+
+  # at the indicated time & date
+  $h->expires('Thu, 25 Apr 1999 00:40:33 GMT')
+
+=item $h->cookie()
+
+Gets or sets the Set-Cookie header.
+The parameter can be an arrayref:
+
+  use CGI qw(cookie);
+  my $cookie1 = cookie(-name => 'foo', -value= 'bar');
+  my $cookie2 = cookie(-name => 'bar', -value= 'baz');
+  $h->cookie([$cookie1, $cookie2]);
+
+or a string:
+
+  $h->cookie($cookie)
+
+=item $h->charset()
+
+Gets or sets the character set sent to the browser.
+If not provided, defaults to ISO-8859-1.
+
+  $h->charset('utf-8')
+
+=item $h->attachment()
+
+Can be used to turn the page into an attachment.
+The value of the argument is suggested name for the saved file.
+
+  $h->attachment('foo.png')
+
+=item $h->p3p()
+
+Gets or sets the P3P tags.
+The parameter can be arrayref or a space-delimited string.
+
+  $h->p3p([qw(CAO DSP LAW CURa)])
+  $h->p3p('CAO DSP LAW CURa')
+
+In either case, the outgoing header will be formatted as:
+
+  P3P: policyref="/w3c/p3p.xml" cp="CAO DSP LAW CURa"
+
+=back
+
 =head1 EXAMPLES
 
 The following code is a Blosxom plugin to enable conditional GET and HEAD using
@@ -144,10 +263,14 @@ plugins/conditional_get:
       return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
 
       my $h = Blosxom::Header->new($blosxom::header);
-      if (_etag_matches($h) or _not_modified_since($h)) {
+      if (etag_matches($h) or not_modified_since($h)) {
           $h->set('Status' => '304 Not Modified');
-          $h->remove($_)
-              for qw(Content-Type Content-Length Content-Disposition);
+          $h->remove($_) for qw(Content-Length attachment);
+
+          # If the Content-Type header isn't defined,
+          # CGI::header will add default value.
+          # And so makes it defined.
+          $h->type(q{});
 
           # Truncate output
           $blosxom::output = q{};
@@ -156,16 +279,16 @@ plugins/conditional_get:
       return;
   }
 
-  sub _etag_matches {
+  sub etag_matches {
       my $h = shift;
       return unless $h->exists('ETag');
       $h->get('ETag') eq _value($ENV{HTTP_IF_NONE_MATCH});
   }
 
-  sub _not_modified_since {
+  sub not_modified_since {
       my $h = shift;
       return unless $h->exists('Last-Modified');
-      $h->exists('Last-Modified') eq _value($ENV{HTTP_IF_MODIFIED_SINCE});
+      $h->get('Last-Modified') eq _value($ENV{HTTP_IF_MODIFIED_SINCE});
   }
 
   sub _value {
@@ -182,7 +305,7 @@ L<Blosxom 2.1.2|http://blosxom.sourceforge.net/>
 
 =head1 SEE ALSO
 
-The interface of this module is inspired by L<Plack::Util>::headers.
+L<CGI>
 
 =head1 AUTHOR
 

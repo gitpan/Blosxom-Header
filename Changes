@@ -1,5 +1,8 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.01011  Feb 5th, 2012
+ - added accessors
+
 0.01010  Jan 30th, 2012
  - Updated "EXAMPLE"
 
