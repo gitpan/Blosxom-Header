@@ -2,7 +2,7 @@ package Blosxom::Header;
 use strict;
 use warnings;
 
-our $VERSION = '0.01011';
+our $VERSION = '0.01012';
 
 sub new {
     my $class   = shift;
@@ -45,8 +45,9 @@ sub exists {
     my $self = shift;
     my $key  = _lc(shift);
 
+    # any
     for (keys %{$self->{headers}}) {
-        return 1 if _lc($_) eq $key; # any
+        return 1 if _lc($_) eq $key;
     } 
 
     return;
@@ -69,25 +70,6 @@ sub _lc {
     $key;
 }
 
-# Accessors
-for my $field (qw(type nph expires cookie charset attachment p3p)) {
-    my $slot = __PACKAGE__ . "::$field";
-    my $code = sub {
-        my $self  = shift;
-        my $value = shift;
-
-        if (defined $value) {
-            $self->set($field => $value);
-        }
-        else {
-            $self->get($field);
-        }
-    };
-
-    no strict 'refs';
-    *$slot = $code;
-}
-
 1;
 
 __END__
@@ -98,27 +80,23 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
 =head1 SYNOPSIS
 
+  # blosxom.cgi
+  package blosxom;
+
+  our $header = { -type => 'text/html' };
+
+  # plugins/foo
+  package foo;
   use Blosxom::Header;
 
-  my $headers = { -type => 'text/html' };
-
-  my $h = Blosxom::Header->new($headers);
+  my $h = Blosxom::Header->new($blosxom::header);
   my $value = $h->get($key);
   my $bool = $h->exists($key);
 
   $h->set($key, $value); # overwrites existent header
   $h->remove($key);
 
-  $h->{headers}; # same reference as $headers
-
-  # Accessors
-  $h->type('text/plain');
-  $h->nph(1);
-  $h->expires('+1d');
-  $h->cookie('foo=bar');
-  $h->charset('utf-8');
-  $h->attachment('foo.png');
-  $h->p3p('foo');
+  $h->{headers}; # same reference as $blosxom::header
 
 =head1 DESCRIPTION
 
@@ -129,7 +107,7 @@ to generate HTTP headers.
 When plugin developers modify HTTP headers, they must write as follows:
 
   package foo;
-  $blosxom::header->{'-type'} = 'text/plain';
+  $blosxom::header->{'-status'} = '304 Not Modified';
 
 It's obviously bad practice. Blosxom misses the interface to modify
 them.  
@@ -137,7 +115,23 @@ them.
 This module allows you to modify them in an object-oriented way:
 
   my $h = Blosxom::Header->new($blosxom::header);
-  $h->type('text/plain');
+  $h->set(Status => '304 Not Modified');
+
+You don't have to care whether to put a hyphen before a key,
+and also whether to make a key lowercased or L<camelized|String::CamelCase>.
+And so the following forms are semantically identical:
+
+=over 4
+
+=item status
+
+=item -status
+
+=item Status
+
+=item -Status
+
+=back
 
 =head2 METHODS
 
@@ -166,77 +160,71 @@ Deletes the specified element from HTTP headers.
 
 =back
 
-=head3 ACCESSORS
+=head2 RECOGNIZED PARAMETERS
 
 Refer to L<CGI>::header.
 
 =over 4
 
-=item $h->type()
+=item type
 
-Gets or sets the Content-Type header.
+Represents the Content-Type header.
 
-  $h->type('text/plain')
+  $h->set(type => 'text/plain')
 
-=item $h->nph()
+=item nph
 
-Gets or sets a Boolean value telling whether to issue the correct
-headers to work with a NPH (no-parse-header) script.
+If set to a true value, will issue the correct headers to work with
+a NPH (no-parse-header) script.
 
-  $h->nph(1)
+  $h->set(nph => 1)
 
-=item $h->expires()
+=item expires
 
-Gets or sets the Expires header.
+Represents the Expires header.
 You can specify an absolute or relative expiration interval.
 The following forms are all valid for this field.
 
-  $h->expires('+30s') # 30 seconds from now
-  $h->expires('+10m') # ten minutes from now
-  $h->expires('+1h')  # one hour from now
-  $h->expires('-1d')  # yesterday
-  $h->expires('now')  # immediately
-  $h->expires('+3M')  # in three months
-  $h->expires('+10y') # in ten years time
+  $h->set(expires => '+30s') # 30 seconds from now
+  $h->set(expires => '+10m') # ten minutes from now
+  $h->set(expires => '+1h')  # one hour from now
+  $h->set(expires => '-1d')  # yesterday
+  $h->set(expires => 'now')  # immediately
+  $h->set(expires => '+3M')  # in three months
+  $h->set(expires => '+10y') # in ten years time
 
   # at the indicated time & date
-  $h->expires('Thu, 25 Apr 1999 00:40:33 GMT')
+  $h->set(expires => 'Thu, 25 Apr 1999 00:40:33 GMT')
 
-=item $h->cookie()
+=item cookie
 
-Gets or sets the Set-Cookie header.
-The parameter can be an arrayref:
+Represents the Set-Cookie header.
+The parameter can be an arrayref or a string.
 
-  use CGI qw(cookie);
-  my $cookie1 = cookie(-name => 'foo', -value= 'bar');
-  my $cookie2 = cookie(-name => 'bar', -value= 'baz');
-  $h->cookie([$cookie1, $cookie2]);
+  $h->set(cookie => ['foo=bar', 'bar=baz']);
+  $h->set(cookie => 'foo=bar')
 
-or a string:
+=item charset
 
-  $h->cookie($cookie)
-
-=item $h->charset()
-
-Gets or sets the character set sent to the browser.
+Represents the character set sent to the browser.
 If not provided, defaults to ISO-8859-1.
 
-  $h->charset('utf-8')
+  $h->set(charset => 'utf-8')
 
-=item $h->attachment()
+=item attachment
 
 Can be used to turn the page into an attachment.
-The value of the argument is suggested name for the saved file.
+Represents suggested name for the saved file.
 
-  $h->attachment('foo.png')
+  $h->set(attachment => 'foo.png')
 
-=item $h->p3p()
+=item p3p
 
-Gets or sets the P3P tags.
+Will add a P3P tag to the outgoing header.
 The parameter can be arrayref or a space-delimited string.
 
-  $h->p3p([qw(CAO DSP LAW CURa)])
-  $h->p3p('CAO DSP LAW CURa')
+  $h->set(p3p => [qw(CAO DSP LAW CURa)])
+  $h->set(p3p => 'CAO DSP LAW CURa')
 
 In either case, the outgoing header will be formatted as:
 
@@ -270,7 +258,7 @@ plugins/conditional_get:
           # If the Content-Type header isn't defined,
           # CGI::header will add default value.
           # And so makes it defined.
-          $h->type(q{});
+          $h->set(type => q{});
 
           # Truncate output
           $blosxom::output = q{};

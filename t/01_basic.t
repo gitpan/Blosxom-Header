@@ -5,8 +5,7 @@ use Blosxom::Header;
 {
     my $h = Blosxom::Header->new({});
     isa_ok $h, 'Blosxom::Header';
-    can_ok $h, qw(new get remove exists set
-                  type nph expires cookie charset attachment p3p);
+    can_ok $h, qw(new get remove exists set);
 }
 
 {

@@ -14,5 +14,4 @@ META.yml
 README
 t/00_compile.t
 t/01_basic.t
-t/02_accessors.t
-t/03_lc.t
+t/02_lc.t
