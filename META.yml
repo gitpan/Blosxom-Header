@@ -3,10 +3,10 @@ abstract: 'Missing interface to modify HTTP headers'
 author:
   - 'Ryo Anazawa (anazawa@cpan.org)'
 build_requires:
-  ExtUtils::MakeMaker: 6.36
+  ExtUtils::MakeMaker: 6.62
   Test::More: 0
 configure_requires:
-  ExtUtils::MakeMaker: 6.36
+  ExtUtils::MakeMaker: 6.62
 distribution_type: module
 dynamic_config: 1
 generated_by: 'Module::Install version 1.04'
@@ -19,6 +19,8 @@ no_index:
   directory:
     - inc
     - t
+requires:
+  perl: 5.8.1
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.01012
+version: 0.01013
