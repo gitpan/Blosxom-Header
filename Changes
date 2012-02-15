@@ -1,5 +1,8 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.01014  Feb 15th, 2012
+  - Added functional interface
+
 0.01013  Feb 13th, 2012
   - &_lc transforms underscores into dashes
 
