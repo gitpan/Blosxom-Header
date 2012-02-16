@@ -3,7 +3,7 @@ use Test::More;
 
 BEGIN {
     use_ok 'Blosxom::Header';
-    use_ok 'Blosxom::Header::Object';
+    use_ok 'Blosxom::Header::Prototype';
 }
 
 done_testing;
