@@ -1,6 +1,6 @@
 use strict;
 use Test::More;
-use Blosxom::Header qw(set_header get_header delete_header exists_header);
+use Blosxom::Header qw(:all);
 
 {
     my $header_ref = { '-foo' => 'bar' };

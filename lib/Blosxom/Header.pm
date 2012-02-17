@@ -3,24 +3,15 @@ use 5.008_001;
 use strict;
 use warnings;
 use Exporter 'import';
-use List::Util 'first';
+use List::Util qw(first);
 
-our $VERSION   = '0.01015';
-our @EXPORT_OK = qw( get_header set_header delete_header exists_header );
+our $VERSION     = '0.01016';
+our @EXPORT_OK   = qw( get_header set_header delete_header exists_header );
+our %EXPORT_TAGS = ( all => [ @EXPORT_OK ] );
 
 sub new {
-    my $class      = __PACKAGE__ . '::Prototype';
-    my $header_ref = $_[1];
-    my %method     = (
-        get    => sub { get_header(    $header_ref, @_ ) },
-        set    => sub { set_header(    $header_ref, @_ ) },
-        exists => sub { exists_header( $header_ref, @_ ) },
-        delete => sub { delete_header( $header_ref, @_ ) },
-    );
-
-    eval "require $class";
-
-    return $class->new( %method );
+    require Blosxom::Header::Object;
+    Blosxom::Header::Object->new( $_[1] );
 }
 
 sub get_header {
@@ -94,7 +85,7 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
   use Blosxom::Header qw(get_header set_header exists_header delete_header);
 
-  # Functional interface
+  # Procedural interface
   my $value = get_header( $blosxom::header, 'foo' );
   my $bool  = exists_header( $blosxom::header, 'foo' );
   set_header( $blosxom::header, 'bar' => 'baz' );
@@ -122,8 +113,8 @@ When plugin developers modify HTTP headers, they must write as follows:
 It's obviously bad practice.
 Blosxom misses the interface to modify them.
 
-This module provieds you a functional one or an object-oriented one.
-You don't need to mind whether to put a hyphen before a key,
+This module provieds you a procedural interface or an object-oriented one.
+You don't need to mind whether to put a dash before a key,
 nor whether to make a key lowercased or L<camelized|String::CamelCase>.
 
 =head2 SUBROUTINES

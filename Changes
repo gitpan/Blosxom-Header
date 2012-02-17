@@ -1,5 +1,8 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.01016  Feb 18th, 2012
+  - Renamed B::H::Prototype to B::H::Object
+
 0.01015  Feb 16th, 2012
   - Renamed B::H::Object to B::H::Prototype
 
