@@ -1,0 +1,115 @@
+# Blosxom plugin : conditional_get
+# Purpose        : enables conditional GET
+# Author         : Ryo Anazawa <anazawa@cpan.org>
+# Version        : 0.01003 (2012/02/08)
+# Documentation  : See the bottom of this file or type: perldoc conditional_get
+
+package conditional_get;
+use strict;
+use warnings;
+use Blosxom::Header;
+
+our $VERSION = '0.01003';
+
+sub start { !$blosxom::static_entries }
+
+sub last {
+    return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
+    my $h = Blosxom::Header->new( $blosxom::header );
+
+    if ( etag_matches( $h ) or not_modified_since( $h ) ) {
+        $h->set( Status => '304 Not Modified' );
+        $h->delete( $_ ) for qw( attachment Content-Length );
+
+        # If Content-Type isn't defined,
+        # CGI::header() will add the default value.
+        # And so makes it defined.
+        $h->set( type => q{} );
+
+        # Truncate output
+        $blosxom::output = q{};
+    }
+
+    return;
+}
+
+# > RFC 2616 14.25 says it's OK and expected to use 'eq' :)
+# >> Note: When handling an If-Modified-Since header field, some
+# >> servers will use an exact date comparison function, rather than a
+# >> less-than function, for deciding whether to send a 304 ...
+
+sub etag_matches {
+    my $h = shift;
+    return unless $h->exists( 'ETag' );
+    $h->get( 'ETag' ) eq _value( $ENV{HTTP_IF_NONE_MATCH} );
+}
+
+sub not_modified_since {
+    my $h = shift;
+    return unless $h->exists( 'Last-Modified' );
+    $h->get( 'Last-Modified' ) eq _value( $ENV{HTTP_IF_MODIFIED_SINCE} );
+}
+
+# > IE sends wrong formatted value
+# > i.e. "Thu, 03 Dec 2009 01:46:32 GMT; length=17936"
+sub _value {
+    my $str = shift;
+    $str =~ s{;.*$}{};
+    $str;
+}
+
+1;
+
+__END__
+
+=head1 NAME
+
+Blosxom Plug-in: conditional_get
+
+=head1 VERSION
+
+0.01003 (2012/02/08)
+
+=head1 SYNOPSIS
+
+Enables condtional GET and HEAD using C<If-None-Match> and
+C<If-Modified-Since> header.
+
+The application should set either or both of C<Last-Modified>
+or C<ETag> response headers according to RFC 2616.
+When either of the conditions is met, the response body is set
+to be zero length and the status is set to 304 Not Modified.
+
+NOTE: This plugin adds neither C<Last-Modified> nor
+C<ETag> response headers.
+
+=head1 INSTALLATION
+
+Drop the conditional_get plug-in into your Blosxom plugins folder.
+
+=head1 DEPENDENCIES
+
+L<Blosxom 2.1.2|http://blosxom.sourceforge.org>,
+L<Blosxom::Header>
+
+=head1 SEE ALSO
+
+L<Plack::Middleware::ConditionalGET>
+
+=head1 AUTHOR
+
+Ryo Anazawa <anazawa@cpan.org>,
+https://github.com/r-anazawa/
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2012 Ryo Anazawa. All rights reserved.
+
+This module is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself. See L<perlartistic>.
+
+This program is distributed in the hope that it will we useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY of FITNESS FOR A PARTICULAR PURPOSE.
+
+=cut
