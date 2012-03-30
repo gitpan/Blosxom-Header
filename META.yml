@@ -6,7 +6,7 @@ build_requires:
   ExtUtils::MakeMaker: 6.59
   Test::Base: 0
   Test::More: 0
-  Test::POD: 0
+  Test::Pod: 0
   Test::Warn: 0
   YAML: 0
 configure_requires:
@@ -26,8 +26,7 @@ no_index:
 requires:
   Carp: 0
   Exporter: 0
-  Scalar::Util: 0
-  perl: 5.8.1
+  perl: 5.8.9
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.02003
+version: 0.02004

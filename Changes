@@ -1,5 +1,8 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.02004  Mar 29th, 2012
+  - Renamed B::H::Object to B::H::Class
+
 0.02003  Mar 29th, 2012
   - Added push_cookie method
 

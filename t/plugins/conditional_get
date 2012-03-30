@@ -15,7 +15,7 @@ sub start { !$blosxom::static_entries }
 
 sub last {
     return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
-    my $h = Blosxom::Header->new( $blosxom::header );
+    my $h = Blosxom::Header->new;
 
     if ( etag_matches( $h ) or not_modified_since( $h ) ) {
         $h->set( Status => '304 Not Modified' );

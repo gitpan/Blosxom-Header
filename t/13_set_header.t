@@ -32,4 +32,10 @@ use Blosxom::Header qw(set_header);
     is_deeply $header_ref, { 'foo' => [ 'bar', 'baz' ] }, 'set arrayref';
 }
 
+{
+    my $header_ref = { foo => 'bar', '-foo' => 'baz' };
+    set_header( $header_ref, foo => 'qux' );
+    is_deeply $header_ref, { 'foo' => 'qux' };
+}
+
 done_testing;

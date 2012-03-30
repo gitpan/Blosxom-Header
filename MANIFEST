@@ -8,7 +8,7 @@ inc/Module/Install/Metadata.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
 lib/Blosxom/Header.pm
-lib/Blosxom/Header/Object.pm
+lib/Blosxom/Header/Class.pm
 Makefile.PL
 MANIFEST			This list of files
 META.yml
@@ -16,12 +16,14 @@ README
 t/00_compile.t
 t/01_normalize.t
 t/02_pod.t
-t/10_get.t
-t/11_exists.t
-t/12_delete.t
-t/13_set.t
-t/14_push_cookie.t
-t/20_object.t
+t/10_get_header.t
+t/11_exists_header.t
+t/12_delete_header.t
+t/13_set_header.t
+t/14_push_header.t
+t/20_new.t
+t/21_get.t
+t/21_object.t
 t/30_cgi_header.t
 t/40_conditional_get.t
 t/plugins/conditional_get
