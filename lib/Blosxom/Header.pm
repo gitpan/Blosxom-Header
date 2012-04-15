@@ -3,83 +3,81 @@ use 5.008_009;
 use strict;
 use warnings;
 use Carp;
-use Exporter 'import';
 
-our $VERSION   = '0.02004';
-our @EXPORT_OK = qw( get_header set_header push_header delete_header exists_header );
+our $VERSION = '0.02005';
 
-# the alias of Blosxom::Header::Class->new
 sub new {
-    require Blosxom::Header::Class;
-    Blosxom::Header::Class->new( $_[1] );
+    my $class = shift;
+    my $header = shift || $blosxom::header;
+    croak 'Not a HASH reference' unless ref $header eq 'HASH';
+    bless { header => $header }, $class;
 }
 
-sub get_header {
-    my $header_ref = shift;
-    my $key        = _norm( shift );
+sub get {
+    my $header = shift->{header};
+    my $key    = _norm( shift );
 
-    my @values;
-    while ( my ( $k, $v ) = each %{ $header_ref } ) {
-        push @values, $v if $key eq _norm( $k );
-    }
+    my @keys = grep { _norm( $_ ) eq $key } keys %{ $header };
+    return unless @keys;
+    carp "Multiple elements specify the $key header." if @keys > 1;
 
-    return unless @values;
-    carp "Multiple elements specify the $key header." if @values > 1;
-
-    my $value = shift @values;
+    my $value = $header->{ shift @keys };
     return $value unless ref $value eq 'ARRAY';
-
     carp "The $key header must be scalar." if $key ne 'cookie' and $key ne 'p3p';
     wantarray ? @{ $value } : $value->[0];
 }
 
-sub delete_header {
-    my $header_ref = shift;
-    my $key        = _norm( shift );
+sub delete {
+    my $header = shift->{header};
+    my $key    = _norm( shift );
 
     # deletes elements whose key matches $key
-    my @keys = grep { _norm( $_ ) eq $key } keys %{ $header_ref };
-    delete @{ $header_ref }{ @keys };
+    my @keys = grep { _norm( $_ ) eq $key } keys %{ $header };
+    delete @{ $header }{ @keys } if @keys;
 
     return;
 }
 
-sub set_header {
-    my $header_ref = shift;
-    my $key        = _norm( shift );
-    my $value      = shift;
-
-    delete_header( $header_ref, $key );
-    $header_ref->{ $key } = $value;
-
+sub set {
+    my ( $self, $key, $value ) = @_;
+    $self->delete( $key );
+    $self->{header}->{ _norm( $key ) } = $value;
     return;
 }
 
-sub exists_header {
-    my $header_ref = shift;
-    my $key        = _norm( shift );
+sub exists {
+    my $header = shift->{header};
+    my $key    = _norm( shift );
 
     my $exists = 0;
-    for my $k ( keys %{ $header_ref } ) {
+    for my $k ( keys %{ $header } ) {
         $exists++ if _norm( $k ) eq $key;
     }
 
     carp "$exists elements specify the $key header." if $exists > 1;
+
     $exists;
 }
 
-sub push_header {
-    my $header_ref = shift;
-    my $key        = _norm( shift );
-    my $value      = shift;
+sub push {
+    my $header = shift->{header};
+    my $key    = _norm( shift );
+    my $value  = shift;
 
-    if ( $key eq 'cookie' or $key eq 'p3p' ) {
-        my @values = get_header( $header_ref, $key ) || ();
-        push @values, $value;
-        set_header( $header_ref, $key => \@values );
+    croak "Can't push the $key header" if $key ne 'cookie' and $key ne 'p3p';
+    my @keys = grep { _norm( $_ ) eq $key } keys %{ $header };
+    croak "Multiple elements specify the $key header" if @keys > 1;
+    $key = shift @keys if @keys;
+    my $old_value = $header->{ $key };
+
+    if ( ref $old_value eq 'ARRAY' ) {
+        push @{ $old_value }, $value;
+    }
+    elsif ( $old_value ) {
+        $header->{ $key } = [ $old_value, $value ];
     }
     else {
-        croak "Can't push the $key header";
+        $header->{ $key } = $value;
     }
 
     return;
@@ -87,12 +85,12 @@ sub push_header {
 
 {
     # suppose read-only
-    my %alias_of = (
+    my %ALIAS_OF = (
         'content-type' => 'type',
         'set-cookie'   => 'cookie',
     );
-
-    # normalize a given key
+    
+    # normalize a given parameter
     sub _norm {
         my $key = lc shift;
 
@@ -102,8 +100,7 @@ sub push_header {
         # use dashes instead of underscores
         $key =~ tr{_}{-};
 
-        # returns the alias of $key if exists
-        $alias_of{ $key } || $key;
+        $ALIAS_OF{ $key } || $key;
     }
 }
 
@@ -122,38 +119,22 @@ Blosxom::Header - Missing interface to modify HTTP headers
       our $header = { -type => 'text/html' };
   }
 
-  use Blosxom::Header qw(
-      get_header
-      set_header
-      delete_header
-      exists_header
-      push_cookie
-  );
+  use Blosxom::Header;
 
-  # Procedural interface
+  my $header = Blosxom::Header->new;
+  my $value  = $header->get( 'Foo' );
+  my $bool   = $header->exists( 'Foo' );
 
-  my $value = get_header( $blosxom::header, 'foo' );
-  my $bool  = exists_header( $blosxom::header, 'foo' );
+  $header->set( Foo => 'bar' );
+  $header->delete( 'Foo' );
 
-  set_header( $blosxom::header, foo => 'bar' );
-  delete_header( $blosxom::header, 'foo' );
+  my @cookies = $header->get( 'Set-Cookie' );
+  $header->push( 'Set-Cookie', 'foo' );
 
-  my @cookies = get_header( $blosxom::header, 'Set-Cookie' );
-  push_header( $blosxom::header, 'Set-Cookie', 'foo' );
+  my @p3p = $header->get( 'P3P' );
+  $header->push( 'P3P', 'foo' );
 
-  # Object-oriented interface
-
-  my $h     = Blosxom::Header->new;
-  my $value = $h->get( 'foo' );
-  my $bool  = $h->exists( 'foo' );
-
-  $h->set( foo => 'bar' );
-  $h->delete( 'foo' );
-
-  my @cookies = $h->get( 'Set-Cookie' );
-  $h->push( 'Set-Cookie', 'foo' );
-
-  $h->{header}; # same reference as $blosxom::header
+  $header->{header}; # same reference as $blosxom::header
 
 =head1 DESCRIPTION
 
@@ -170,89 +151,51 @@ When plugin developers modify HTTP headers, they must write as follows:
 It's obviously bad practice.
 The problem is multiple elements may specify the same field:
 
-  $blosxom::header->{'-status'} = '304 Not Modified';
-  $blosxom::header->{'status' } = '304 Not Modified';
-  $blosxom::header->{'-Status'} = '304 Not Modified';
-  $blosxom::header->{'Status' } = '304 Not Modified';
+  package bar;
+  $blosxom::header->{'status'} = '404 Not Found';
+
+  package baz;
+  $blosxom::header->{'-Status'} = '301 Moved Permanently';
 
 Blosxom misses the interface to modify HTTP headers.
 
 If you used this module, you might write as follows:
 
   package foo;
-  use Blosxom::Header qw(set_header);
-  set_header( $blosxom::header, Status => '304 Not Modified' );
+  use Blosxom::Header;
+  my $header = Blosxom::Header->new;
+  $header->set( Status => '304 Not Modified' );
 
-If you prefer OO interface to procedural one,
-
-  my $h = Blosxom::Header->new;
-  $h->set( Status => '304 Not Modified' );
-
-You don't have to mind whether to put a dash before a key, nor whether to
-choose between 'type' and 'content-type' when you specify the
-Content-Type header, any more.
-
-=head2 SUBROUTINES
-
-The following are exported on demand.
-
-=over 4
-
-=item $value = get_header( $blosxom::header, 'foo' )
-
-Returns a value of the specified HTTP header.
-
-=item @cookies = get_header( $blosxom::header, 'Set-Cookie' )
-
-Returns values of the Set-Cookie headers.
-
-=item set_header( $blosxom::header, 'foo' => 'bar' )
-
-Sets a value of the specified HTTP header.
-
-=item $bool = exists_header( $blosxom::header, 'foo' )
-
-Returns a Boolean value telling whether the specified HTTP header exists.
-
-=item delete_header( $blosxom::header, 'foo' )
-
-Deletes all the specified elements from HTTP headers.
-
-=item push_header( $blosxom::header, 'Set-Cookie', 'foo' )
-
-Pushes the Set-Cookie header onto HTTP headers.
-
-=back
+You don't have to mind whether to put a dash before a key,
+nor whether to make a key lowercased, any more.
 
 =head2 METHODS
 
 =over 4
 
-=item $h = Blosxom::Header->new
+=item $header = Blosxom::Header->new
 
 Creates a new Blosxom::Header object.
 
-=item $bool = $h->exists( 'foo' )
+=item $value = $header->get( 'Foo' )
 
-A synonym for exists_header.
+Returns a value of the specified HTTP header.
 
-=item $value = $h->get( 'foo' )
+=item $header->set( Foo => 'bar' )
 
-=item @cookies = $h->get( 'Set-Cookie' )
+Sets a value of the specified HTTP header.
 
-A synonym for get_header.
+=item $bool = $header->exists( 'Foo' )
 
-=item $h->delete( 'foo' )
+Returns a Boolean value telling whether the specified HTTP header exists.
 
-A synonym for delete_header.
+=item $header->delete( 'Foo' )
 
-=item $h->set( 'foo' => 'bar' )
+Deletes all the specified elements from HTTP headers.
 
-A synonym for set_header.
+=item $header->push( 'Set-Cookie', 'foo' )
 
-=item $h->push( 'Set-Cookie', 'foo' )
-
-A synonym for push_header.
+Pushes the Set-Cookie header onto HTTP headers.
 
 =back
 
@@ -267,7 +210,7 @@ L<CGI>::header recognizes the following parameters.
 Can be used to turn the page into an attachment.
 Represents suggested name for the saved file.
 
-  $h->set( attachment => 'foo.png' );
+  $header->set( attachment => 'foo.png' );
 
 In this case, the outgoing header will be formatted as:
 
@@ -278,17 +221,15 @@ In this case, the outgoing header will be formatted as:
 Represents the character set sent to the browser.
 If not provided, defaults to ISO-8859-1.
 
-  $h->set( charset => 'utf-8' );
+  $header->set( charset => 'utf-8' );
 
 =item cookie
 
 Represents the Set-Cookie headers.
 The parameter can be an arrayref or a string.
 
-  $h->set( cookie => [$cookie1, $cookie2] );
-  $h->set( cookie => $cookie );
-
-Refer to L<CGI>::cookie.
+  $header->set( cookie => [ 'foo', 'bar' ] );
+  $header->set( cookie => 'baz' );
 
 =item expires
 
@@ -296,16 +237,16 @@ Represents the Expires header.
 You can specify an absolute or relative expiration interval.
 The following forms are all valid for this field.
 
-  $h->set( expires => '+30s' ); # 30 seconds from now
-  $h->set( expires => '+10m' ); # ten minutes from now
-  $h->set( expires => '+1h'  ); # one hour from now
-  $h->set( expires => '-1d'  ); # yesterday
-  $h->set( expires => 'now'  ); # immediately
-  $h->set( expires => '+3M'  ); # in three months
-  $h->set( expires => '+10y' ); # in ten years time
+  $header->set( expires => '+30s' ); # 30 seconds from now
+  $header->set( expires => '+10m' ); # ten minutes from now
+  $header->set( expires => '+1h'  ); # one hour from now
+  $header->set( expires => '-1d'  ); # yesterday
+  $header->set( expires => 'now'  ); # immediately
+  $header->set( expires => '+3M'  ); # in three months
+  $header->set( expires => '+10y' ); # in ten years time
 
   # at the indicated time & date
-  $h->set( expires => 'Thu, 25 Apr 1999 00:40:33 GMT' );
+  $header->set( expires => 'Thu, 25 Apr 1999 00:40:33 GMT' );
 
 =item nph
 
@@ -313,15 +254,15 @@ If set to a true value,
 will issue the correct headers to work with
 a NPH (no-parse-header) script:
 
-  $h->set( nph => 1 );
+  $header->set( nph => 1 );
 
 =item p3p
 
 Will add a P3P tag to the outgoing header.
 The parameter can be an arrayref or a space-delimited string.
 
-  $h->set( p3p => [qw(CAO DSP LAW CURa)] );
-  $h->set( p3p => 'CAO DSP LAW CURa' );
+  $header->set( p3p => [ qw/CAO DSP LAW CURa/ ] );
+  $header->set( p3p => 'CAO DSP LAW CURa' );
 
 In either case, the outgoing header will be formatted as:
 
@@ -331,17 +272,17 @@ In either case, the outgoing header will be formatted as:
 
 Represents the Content-Type header.
 
-  $h->set( type => 'text/plain' );
+  $header->set( type => 'text/plain' );
 
 =back
 
 =head1 DEPENDENCIES
 
-L<Blosxom 2.1.2|http://blosxom.sourceforge.net/>
+L<Blosxom 2.0.0|http://blosxom.sourceforge.net/> or higher.
 
 =head1 SEE ALSO
 
-L<Blosxom::Header::Class>, L<CGI>
+L<CGI>
 
 =head1 AUTHOR
 
@@ -359,3 +300,4 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 =cut
+

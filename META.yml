@@ -18,15 +18,18 @@ license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
+module_name: Blosxom::Header
 name: Blosxom-Header
 no_index:
   directory:
+    - examples
     - inc
     - t
+    - xt
 requires:
   Carp: 0
-  Exporter: 0
   perl: 5.8.9
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.02004
+  repository: https://github.com/anazawa/p5-Blosxom-Header
+version: 0.02005

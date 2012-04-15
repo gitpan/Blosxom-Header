@@ -16,19 +16,18 @@ sub start { !$blosxom::static_entries }
 sub last {
     return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
     my $h = Blosxom::Header->new;
+    return unless etag_matches( $h ) or not_modified_since( $h );
 
-    if ( etag_matches( $h ) or not_modified_since( $h ) ) {
-        $h->set( Status => '304 Not Modified' );
-        $h->delete( $_ ) for qw( attachment Content-Length );
+    $h->set( Status => '304 Not Modified' );
+    $h->delete( $_ ) for qw( Content-Type Content-Disposition attachment Content-Length );
 
-        # If Content-Type isn't defined,
-        # CGI::header() will add the default value.
-        # And so makes it defined.
-        $h->set( type => q{} );
+    # If Content-Type isn't defined,
+    # CGI::header() will add the default value.
+    # And so makes it defined.
+    $h->set( type => q{} );
 
-        # Truncate output
-        $blosxom::output = q{};
-    }
+    # Truncate output
+    $blosxom::output = q{};
 
     return;
 }
