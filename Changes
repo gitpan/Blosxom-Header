@@ -1,7 +1,20 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.03001  Apr 17th, 2012
+  - 'push' method carps like CORE::push.
+    And also receives multiple values:
+        $header->push( 'Set-Cookie' => @cookies )
+  - 'set' method receives the list of named parameters:
+        $header->set(
+            Foo => 'bar',
+            Bar => 'baz',
+        )
+    Separated internal '_set' method from 'set'
+  - 'delete' method receives the list of field names:
+        $header->delete( 'Foo', 'Bar' )
+
 0.03000  Apr 16th, 2012
-  - Suppose plugin developers always 'use Blosxom::Header',
+  - Suppose plugin developers always 'use Blosxom::Header'
     whenever they modify HTTP headers
   - Renamed &_norm to &_normalize_field_name
 

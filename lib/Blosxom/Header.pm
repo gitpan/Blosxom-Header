@@ -4,19 +4,19 @@ use strict;
 use warnings;
 use Carp;
 
-our $VERSION = '0.03000';
+our $VERSION = '0.03001';
 
 sub new {
     my $class = shift;
     my $header = shift || $blosxom::header;
-    croak 'Not a HASH reference' unless ref $header eq 'HASH';
+    croak( 'Not a HASH reference' ) unless ref $header eq 'HASH';
     bless { header => $header }, $class;
 }
 
 sub get {
-    my ( $self, $field ) = @_;
-    return unless $self->exists( $field );
-    my $value = $self->{header}->{ _normalize_field_name( $field ) };
+    my $header = shift->{header};
+    my $field = _normalize_field_name( shift );
+    my $value = $header->{ $field };
     return $value unless ref $value eq 'ARRAY';
     return @{ $value } if wantarray;
     $value->[0];
@@ -24,25 +24,8 @@ sub get {
 
 sub delete {
     my $header = shift->{header};
-    my $field  = _normalize_field_name( shift );
-
-    delete $header->{ $field };
-
-    return;
-}
-
-sub set {
-    my $header = shift->{header};
-    my $field  = _normalize_field_name( shift );
-    my $value  = shift;
-
-    if ( ref $value eq 'ARRAY' and $field ne '-cookie' and $field ne '-p3p' ) {
-        croak "The $field header must be SCALAR. See 'perldoc CGI'";
-    }
-
-    $header->{ $field } = $value;
-
-    return;
+    my @fields = map { _normalize_field_name( $_ ) } @_;
+    delete @{ $header }{ @fields };
 }
 
 sub exists {
@@ -51,40 +34,66 @@ sub exists {
     exists $header->{ $field };
 }
 
-sub push {
-    my ( $self, $field, $value ) = @_;
+sub set {
+    my ( $self, @fields ) = @_;
 
-    if ( $self->exists( $field ) ) {
-        my $old_value = $self->{header}->{ _normalize_field_name( $field ) };
-        if ( ref $old_value eq 'ARRAY' ) {
-            push @{ $old_value }, $value;
-        }
-        else {
-            $self->set( $field => [ $old_value, $value ] );
-        }
+    if ( @fields == 2 ) {
+        $self->_set( @fields );
     }
     else {
-        $self->set( $field => $value );
+        while ( my ( $field, $value ) = splice @fields, 0, 2 ) {
+            $self->_set( $field => $value );
+        }
     }
 
     return;
 }
 
+sub _set {
+    my $header = shift->{header};
+    my $field  = _normalize_field_name( shift );
+    my $value  = shift;
+
+    croak( "The $field header can't be an ARRAY reference. See 'perldoc CGI'" )
+        if ref $value eq 'ARRAY' and $field ne '-cookie' and $field ne '-p3p';
+
+    $header->{ $field } = $value;
+
+    return;
+}
+
+sub push {
+    my $self   = shift;
+    my $field  = _normalize_field_name( shift );
+    my @values = @_;
+
+    unless ( @values ) {
+        carp( 'Useless use of push with no values' );
+        return;
+    }
+
+    if ( my $old_value = $self->{header}->{ $field } ) {
+        if ( ref $old_value eq 'ARRAY' ) {
+            push @{ $old_value }, @values;
+            return;
+        }
+        unshift @values, $old_value;
+    }
+
+    $self->_set( $field => @values > 1 ? \@values : shift @values );
+
+    return;
+}
+
 {
-    # suppose read-only
-    my %ALIAS_OF = (
-        '-content-type' => '-type',
-        '-set-cookie'   => '-cookie',
-    );
-    
-    # cache (how do we prove cache works?)
-    my %norm_of = %ALIAS_OF;
+    my %norm_of; # cache
 
     sub _normalize_field_name {
         my $field = shift;
+
         return unless $field;
 
-        # return cached value if exists
+        # use cache if exists
         return $norm_of{ $field } if exists $norm_of{ $field };
 
         # lowercase $field
@@ -97,7 +106,8 @@ sub push {
         $norm =~ tr{_}{-};
 
         # use alias if exists
-        $norm = $ALIAS_OF{ $norm } if exists $ALIAS_OF{ $norm };
+        $norm = '-type'   if $norm eq '-content-type';
+        $norm = '-cookie' if $norm eq '-set-cookie';
 
         $norm_of{ $field } = $norm;
     }

@@ -23,6 +23,16 @@ use Blosxom::Header;
 
 {
     my $header = Blosxom::Header->new({});
+    $header->set(
+        -foo => 'bar',
+        -bar => 'baz',
+    );
+    my $expected = { -foo => 'bar', -bar => 'baz' };
+    is_deeply $header->{header}, $expected, 'set multiple elements';
+}
+
+{
+    my $header = Blosxom::Header->new({});
     $header->set( Foo => 'bar' );
     is_deeply $header->{header}, { -foo => 'bar' }, 'set, not case-sensitive';
 }
@@ -42,7 +52,7 @@ use Blosxom::Header;
 {
     my $header = Blosxom::Header->new({});
     eval { $header->set( Foo => [ 'foo', 'bar' ] ) };
-    like $@, qr{^The -foo header must be SCALAR};
+    like $@, qr{^The -foo header can't be an ARRAY reference};
 }
 
 done_testing;

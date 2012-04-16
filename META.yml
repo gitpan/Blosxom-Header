@@ -7,6 +7,7 @@ build_requires:
   Test::Base: 0
   Test::More: 0
   Test::Pod: 0
+  Test::Warn: 0
   YAML: 0
 configure_requires:
   ExtUtils::MakeMaker: 6.59
@@ -31,4 +32,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/anazawa/p5-Blosxom-Header
-version: 0.03000
+version: 0.03001
