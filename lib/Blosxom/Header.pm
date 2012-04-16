@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Carp;
 
-our $VERSION = '0.02005';
+our $VERSION = '0.03000';
 
 sub new {
     my $class = shift;
@@ -14,70 +14,57 @@ sub new {
 }
 
 sub get {
-    my $header = shift->{header};
-    my $key    = _norm( shift );
-
-    my @keys = grep { _norm( $_ ) eq $key } keys %{ $header };
-    return unless @keys;
-    carp "Multiple elements specify the $key header." if @keys > 1;
-
-    my $value = $header->{ shift @keys };
+    my ( $self, $field ) = @_;
+    return unless $self->exists( $field );
+    my $value = $self->{header}->{ _normalize_field_name( $field ) };
     return $value unless ref $value eq 'ARRAY';
-    carp "The $key header must be scalar." if $key ne 'cookie' and $key ne 'p3p';
-    wantarray ? @{ $value } : $value->[0];
+    return @{ $value } if wantarray;
+    $value->[0];
 }
 
 sub delete {
     my $header = shift->{header};
-    my $key    = _norm( shift );
+    my $field  = _normalize_field_name( shift );
 
-    # deletes elements whose key matches $key
-    my @keys = grep { _norm( $_ ) eq $key } keys %{ $header };
-    delete @{ $header }{ @keys } if @keys;
+    delete $header->{ $field };
 
     return;
 }
 
 sub set {
-    my ( $self, $key, $value ) = @_;
-    $self->delete( $key );
-    $self->{header}->{ _norm( $key ) } = $value;
+    my $header = shift->{header};
+    my $field  = _normalize_field_name( shift );
+    my $value  = shift;
+
+    if ( ref $value eq 'ARRAY' and $field ne '-cookie' and $field ne '-p3p' ) {
+        croak "The $field header must be SCALAR. See 'perldoc CGI'";
+    }
+
+    $header->{ $field } = $value;
+
     return;
 }
 
 sub exists {
     my $header = shift->{header};
-    my $key    = _norm( shift );
-
-    my $exists = 0;
-    for my $k ( keys %{ $header } ) {
-        $exists++ if _norm( $k ) eq $key;
-    }
-
-    carp "$exists elements specify the $key header." if $exists > 1;
-
-    $exists;
+    my $field = _normalize_field_name( shift );
+    exists $header->{ $field };
 }
 
 sub push {
-    my $header = shift->{header};
-    my $key    = _norm( shift );
-    my $value  = shift;
+    my ( $self, $field, $value ) = @_;
 
-    croak "Can't push the $key header" if $key ne 'cookie' and $key ne 'p3p';
-    my @keys = grep { _norm( $_ ) eq $key } keys %{ $header };
-    croak "Multiple elements specify the $key header" if @keys > 1;
-    $key = shift @keys if @keys;
-    my $old_value = $header->{ $key };
-
-    if ( ref $old_value eq 'ARRAY' ) {
-        push @{ $old_value }, $value;
-    }
-    elsif ( $old_value ) {
-        $header->{ $key } = [ $old_value, $value ];
+    if ( $self->exists( $field ) ) {
+        my $old_value = $self->{header}->{ _normalize_field_name( $field ) };
+        if ( ref $old_value eq 'ARRAY' ) {
+            push @{ $old_value }, $value;
+        }
+        else {
+            $self->set( $field => [ $old_value, $value ] );
+        }
     }
     else {
-        $header->{ $key } = $value;
+        $self->set( $field => $value );
     }
 
     return;
@@ -86,21 +73,33 @@ sub push {
 {
     # suppose read-only
     my %ALIAS_OF = (
-        'content-type' => 'type',
-        'set-cookie'   => 'cookie',
+        '-content-type' => '-type',
+        '-set-cookie'   => '-cookie',
     );
     
-    # normalize a given parameter
-    sub _norm {
-        my $key = lc shift;
+    # cache (how do we prove cache works?)
+    my %norm_of = %ALIAS_OF;
 
-        # get rid of an initial dash if exists
-        $key =~ s{^\-}{};
+    sub _normalize_field_name {
+        my $field = shift;
+        return unless $field;
+
+        # return cached value if exists
+        return $norm_of{ $field } if exists $norm_of{ $field };
+
+        # lowercase $field
+        my $norm = lc $field;
+
+        # add initial dash if not exists
+        $norm = "-$norm" unless $norm =~ /^-/;
 
         # use dashes instead of underscores
-        $key =~ tr{_}{-};
+        $norm =~ tr{_}{-};
 
-        $ALIAS_OF{ $key } || $key;
+        # use alias if exists
+        $norm = $ALIAS_OF{ $norm } if exists $ALIAS_OF{ $norm };
+
+        $norm_of{ $field } = $norm;
     }
 }
 
@@ -114,11 +113,10 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
 =head1 SYNOPSIS
 
-  {
-      package blosxom;
-      our $header = { -type => 'text/html' };
-  }
+  package blosxom;
+  our $header = { -type => 'text/html' };
 
+  package plugin_foo;
   use Blosxom::Header;
 
   my $header = Blosxom::Header->new;
@@ -129,10 +127,10 @@ Blosxom::Header - Missing interface to modify HTTP headers
   $header->delete( 'Foo' );
 
   my @cookies = $header->get( 'Set-Cookie' );
-  $header->push( 'Set-Cookie', 'foo' );
+  $header->push( 'Set-Cookie' => 'foo' );
 
   my @p3p = $header->get( 'P3P' );
-  $header->push( 'P3P', 'foo' );
+  $header->push( P3P => 'foo' );
 
   $header->{header}; # same reference as $blosxom::header
 
@@ -193,7 +191,7 @@ Returns a Boolean value telling whether the specified HTTP header exists.
 
 Deletes all the specified elements from HTTP headers.
 
-=item $header->push( 'Set-Cookie', 'foo' )
+=item $header->push( 'Set-Cookie' => 'foo' )
 
 Pushes the Set-Cookie header onto HTTP headers.
 

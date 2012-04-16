@@ -1,49 +1,12 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.03000  Apr 16th, 2012
+  - Suppose plugin developers always 'use Blosxom::Header',
+    whenever they modify HTTP headers
+  - Renamed &_norm to &_normalize_field_name
+
 0.02005  Apr 15th, 2012
-  - Released.
-
-0.02004  Mar 29th, 2012
-  - Renamed B::H::Object to B::H::Class
-
-0.02003  Mar 29th, 2012
-  - Added push_cookie method
-
-0.01016  Feb 18th, 2012
-  - Renamed B::H::Prototype to B::H::Object
-
-0.01015  Feb 16th, 2012
-  - Renamed B::H::Object to B::H::Prototype
-
-0.01014  Feb 15th, 2012
-  - Added functional interface
-
-0.01013  Feb 13th, 2012
-  - &_lc transforms underscores into dashes
-
-0.01012  Feb 7th, 2012
-  - removed accessors
-
-0.01011  Feb 5th, 2012
-  - added accessors
-
-0.01010  Jan 30th, 2012
-  - Updated "EXAMPLE"
-
-0.01009  Jan 26th, 2012
-  - Modified "EXAMPLE"
-
-0.01008  Jan 25th, 2012
-  - Removed @EXPORT_OK
-
-0.01007  Jan 18th, 2012
-  - Modified interface
-
-0.01006  Jan 17th, 2012
-  - Removed 'get' and 'exists' method
-
-0.01004  Jan 2nd, 2012
-  - Added DESTORY method
+  - First release
 
 0.01002  Jan 1st, 2012
   - First version

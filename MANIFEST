@@ -15,7 +15,7 @@ MANIFEST			This list of files
 META.yml
 README
 t/00_compile.t
-t/01_normalize.t
+t/01_normalize_field_name.t
 t/10_new.t
 t/11_get.t
 t/12_exists.t
