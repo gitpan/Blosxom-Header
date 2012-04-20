@@ -18,7 +18,7 @@ use Test::More;
     my $header_ref = {};
     my $header = Blosxom::Header->new( $header_ref );
     isa_ok $header, 'Blosxom::Header';
-    can_ok $header, qw( new get set push exists delete );
+    can_ok $header, qw( new get set push_cookie push_p3p exists delete );
     is $header->{header}, $header_ref;
 }
 

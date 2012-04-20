@@ -1,7 +1,7 @@
 # Blosxom plugin : conditional_get
 # Purpose        : enables conditional GET
 # Author         : Ryo Anazawa <anazawa@cpan.org>
-# Version        : 0.01003 (2012/02/08)
+# Version        : 0.01004 (2012/04/18)
 # Documentation  : See the bottom of this file or type: perldoc conditional_get
 
 package conditional_get;
@@ -9,25 +9,28 @@ use strict;
 use warnings;
 use Blosxom::Header;
 
-our $VERSION = '0.01003';
+our $VERSION = '0.01004';
 
 sub start { !$blosxom::static_entries }
 
 sub last {
     return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
-    my $h = Blosxom::Header->new;
-    return unless etag_matches( $h ) or not_modified_since( $h );
+    my $header = Blosxom::Header->new;
 
-    $h->set( Status => '304 Not Modified' );
-    $h->delete( $_ ) for qw( Content-Type Content-Disposition attachment Content-Length );
+    if ( etag_matches( $header ) or not_modified_since( $header ) ) {
+        $header->delete( qw/Content-Disposition attachment Content-Length/ );
 
-    # If Content-Type isn't defined,
-    # CGI::header() will add the default value.
-    # And so makes it defined.
-    $h->set( type => q{} );
+        # If Content-Type isn't defined,
+        # CGI::header() will add the default value.
+        # And so makes it defined.
+        $header->set(
+            Content_Type => q{},
+            Status       => '304 Not Modified',
+        );
 
-    # Truncate output
-    $blosxom::output = q{};
+        # Truncate output
+        $blosxom::output = q{};
+    }
 
     return;
 }
@@ -38,15 +41,15 @@ sub last {
 # >> less-than function, for deciding whether to send a 304 ...
 
 sub etag_matches {
-    my $h = shift;
-    return unless $h->exists( 'ETag' );
-    $h->get( 'ETag' ) eq _value( $ENV{HTTP_IF_NONE_MATCH} );
+    my $header = shift;
+    return unless $header->exists( 'ETag' );
+    $header->get( 'ETag' ) eq _value( $ENV{HTTP_IF_NONE_MATCH} );
 }
 
 sub not_modified_since {
-    my $h = shift;
-    return unless $h->exists( 'Last-Modified' );
-    $h->get( 'Last-Modified' ) eq _value( $ENV{HTTP_IF_MODIFIED_SINCE} );
+    my $header = shift;
+    return unless $header->exists( 'Last-Modified' );
+    $header->get( 'Last-Modified' ) eq _value( $ENV{HTTP_IF_MODIFIED_SINCE} );
 }
 
 # > IE sends wrong formatted value
@@ -67,7 +70,7 @@ Blosxom Plug-in: conditional_get
 
 =head1 VERSION
 
-0.01003 (2012/02/08)
+0.01004 (2012/04/18)
 
 =head1 SYNOPSIS
 
@@ -88,7 +91,8 @@ Drop the conditional_get plug-in into your Blosxom plugins folder.
 
 =head1 DEPENDENCIES
 
-L<Blosxom 2.1.2|http://blosxom.sourceforge.org>,
+L<Blosxom 2.0.0|http://blosxom.sourceforge.org> or higher.
+
 L<Blosxom::Header>
 
 =head1 SEE ALSO
@@ -98,7 +102,7 @@ L<Plack::Middleware::ConditionalGET>
 =head1 AUTHOR
 
 Ryo Anazawa <anazawa@cpan.org>,
-https://github.com/r-anazawa/
+https://github.com/anazawa/
 
 =head1 LICENSE AND COPYRIGHT
 

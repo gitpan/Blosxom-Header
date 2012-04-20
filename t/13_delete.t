@@ -8,13 +8,11 @@ use Test::More;
         -bar => 'baz',
     });
 
-    my @values = $header->delete( '-foo' );
+    is_deeply [ $header->delete( '-foo' ) ], [ 'bar' ];
     is_deeply $header->{header}, { -bar => 'baz' }, 'delete';
-    is_deeply \@values, [ 'bar' ];
 
-    @values = $header->delete( '-foo' );
+    is $header->delete( '-foo' ), undef;
     is_deeply $header->{header}, { -bar => 'baz' }, 'delete nothing';
-    is_deeply \@values, [ undef ];
 }
 
 {
@@ -24,9 +22,8 @@ use Test::More;
         -baz => 'qux',
     });
 
-    my @values = $header->delete( '-foo', '-bar' );
+    is_deeply [ $header->delete( '-foo', '-bar' ) ], [ qw/bar baz/ ];
     is_deeply $header->{header}, { -baz => 'qux' }, 'delete multiple elements';
-    is_deeply \@values, [ 'bar', 'baz' ];
 }
 
 {

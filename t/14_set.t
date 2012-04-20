@@ -1,5 +1,6 @@
 use strict;
 use Test::More;
+use Test::Warn;
 use Blosxom::Header;
 
 {
@@ -33,6 +34,12 @@ use Blosxom::Header;
 
 {
     my $header = Blosxom::Header->new({});
+    eval { $header->set( '-foo' ) };
+    like $@, qr{^Odd number of elements are passed to set()};
+}
+
+{
+    my $header = Blosxom::Header->new({});
     $header->set( Foo => 'bar' );
     is_deeply $header->{header}, { -foo => 'bar' }, 'set, not case-sensitive';
 }
@@ -40,13 +47,15 @@ use Blosxom::Header;
 {
     my $header = Blosxom::Header->new({});
     $header->set( 'Set-Cookie' => [ 'foo', 'bar' ] );
-    is_deeply $header->{header}, { -cookie => [ 'foo', 'bar' ] }, 'set cookie arrayref';
+    my $expected = { -cookie => [ 'foo', 'bar' ] };
+    is_deeply $header->{header}, $expected, 'set cookie arrayref';
 }
 
 {
     my $header = Blosxom::Header->new({});
     $header->set( P3P => [ 'foo', 'bar' ] );
-    is_deeply $header->{header}, { -p3p => [ 'foo', 'bar' ] }, 'set p3p arrayref';
+    my $expected = { -p3p => [ 'foo', 'bar' ] };
+    is_deeply $header->{header}, $expected, 'set p3p arrayref';
 }
 
 {

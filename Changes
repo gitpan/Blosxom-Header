@@ -1,14 +1,31 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.03002 Apr 20th, 2012
+  - push() is deprecated and will be removed in 0.04.
+    Use push_cookie() or push_p3p() instead.
+    Internally, push() was renamed to _push().
+  - When we specify field names, we follow HTTP::Headers' way:
+      "To make the life easier for perl users who wants to avoid quoting
+      before the => operator, you can use '_' as a replacement for '-'
+      in header names."
+  - Added the following accessors:
+      * attachment
+      * charset
+      * cookie
+      * expires
+      * nph
+      * p3p
+      * target
+      * type
+
 0.03001  Apr 17th, 2012
-  - 'push' method carps like CORE::push.
-    And also receives multiple values:
-        $header->push( 'Set-Cookie' => @cookies )
-  - 'set' method receives the list of named parameters:
-        $header->set(
-            Foo => 'bar',
-            Bar => 'baz',
-        )
+  - push() carps like CORE::push, and also receives multiple values:
+      $header->push( 'Set-Cookie' => @cookies )
+  - set() receives the list of named arguments:
+      $header->set(
+        Foo => 'bar',
+        Bar => 'baz',
+      )
     Separated internal '_set' method from 'set'
   - 'delete' method receives the list of field names:
         $header->delete( 'Foo', 'Bar' )
