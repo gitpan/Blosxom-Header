@@ -4,7 +4,11 @@ use strict;
 use warnings;
 use Carp qw/carp croak/;
 
-our $VERSION = '0.03002';
+# parameters recognized by CGI::header()
+use constant ATTRIBUTES
+    => qw/attachment charset cookie expires nph p3p status target type/;
+
+our $VERSION = '0.03003';
 
 sub new {
     my $class = shift;
@@ -14,23 +18,29 @@ sub new {
 }
 
 sub get {
-    my $header = shift->{header};
+    my $self = shift;
     my $field = _normalize_field_name( shift );
-    my $value = $header->{ $field };
+    my $value = $self->{header}->{$field};
     return $value unless ref $value eq 'ARRAY';
-    wantarray ? @{ $value } : $value->[0];
+    return @{ $value } if wantarray;
+    return $value if defined wantarray;
 }
 
 sub delete {
-    my $header = shift->{header};
+    my $self = shift;
     my @fields = map { _normalize_field_name( $_ ) } @_;
-    delete @{ $header }{ @fields };
+    delete @{ $self->{header} }{ @fields };
 }
 
 sub exists {
-    my $header = shift->{header};
+    my $self = shift;
     my $field = _normalize_field_name( shift );
-    exists $header->{ $field };
+    exists $self->{header}->{$field};
+}
+
+sub clear {
+    my $self = shift;
+    %{ $self->{header} } = ();
 }
 
 sub set {
@@ -51,88 +61,90 @@ sub set {
     return;
 }
 
-{
-    my %isa_ArrayRef = (
-        -cookie => 1,
-        -p3p    => 1,
-    );
+sub _set {
+    my $self  = shift;
+    my $field = _normalize_field_name( shift );
+    my $value = shift;
 
-    sub _set {
-        my $header = shift->{header};
-        my $field  = _normalize_field_name( shift );
-        my $value  = shift;
+    $self->{header}->{$field} = $value;
 
-        croak( "The $field header can't be an ARRAY reference" )
-            if ref $value eq 'ARRAY' and !$isa_ArrayRef{ $field };
-
-        $header->{ $field } = $value;
-
-        return;
-    }
+    return;
 }
 
+sub push_cookie { shift->_push( -cookie => @_ ) }
+sub push_p3p    { shift->_push( -p3p    => @_ ) }
+
 sub _push {
-    my ( $self, $field, @values ) = @_;
+    my $self   = shift;
+    my $field  = _normalize_field_name( shift );
+    my @values = @_;
 
     unless ( @values ) {
         carp( 'Useless use of _push() with no values' );
         return;
     }
 
-    my $norm = _normalize_field_name( $field );
-
-    if ( my $old_value = $self->{header}->{$norm} ) {
-        return CORE::push @{ $old_value }, @values if ref $old_value eq 'ARRAY';
+    if ( my $old_value = $self->{header}->{$field} ) {
+        return push @{ $old_value }, @values if ref $old_value eq 'ARRAY';
         unshift @values, $old_value;
     }
 
     $self->_set( $field => @values > 1 ? \@values : $values[0] );
 
-    scalar @values;
+    # returns the number of elements in @values like CORE::push
+    scalar @values if defined wantarray;
 }
 
 # Will be removed in 0.04
 sub push { shift->_push( @_ ) }
 
-sub push_cookie { shift->_push( Set_Cookie => @_ ) }
-sub push_p3p    { shift->_push( P3P        => @_ ) }
+# make accessors
+for my $method ( ATTRIBUTES ) {
+    my $slot  = __PACKAGE__ . "::$method";
+    my $field = "-$method";
+
+    no strict 'refs';
+
+    *$slot = sub {
+        my $self = shift;
+        $self->_set( $field => shift ) if @_;
+        $self->get( $field );
+    };
+}
+
+# tie() interface 
+
+sub TIEHASH { shift->new( @_ )    }
+sub FETCH   { shift->get( @_ )    }
+sub STORE   { shift->_set( @_ )   }
+sub EXISTS  { shift->exists( @_ ) }
+sub DELETE  { shift->delete( @_ ) }
+sub CLEAR   { shift->clear        }
+
+sub FIRSTKEY {
+    my $self = shift;
+    keys %{ $self->{header} };
+    my $first_key = each %{ $self->{header} };
+    _denormalize_field_name( $first_key ) if $first_key;
+}
+
+sub NEXTKEY {
+    my $self = shift;
+    my $next_key = each %{ $self->{header} };
+    _denormalize_field_name( $next_key ) if $next_key;
+}
+
+# Uilities
 
 {
-    # cache
-    my %norm_of = (
-        Content_Type => '-type',
-        Expires      => '-expires',
-        P3P          => '-p3p',
-        Set_Cookie   => '-cookie',
-        attachment   => '-attachment',
-        charset      => '-charset',
-        nph          => '-nph',
-        target       => '-target',
+    my %ALIAS_OF = (
+        '-content-type' => '-type',
+        '-set-cookie'   => '-cookie',
+        '-cookies'      => '-cookie',
     );
 
-    # make accessors
-    while ( my ( $field, $norm ) = each %norm_of ) {
-        $norm =~ s/^-//;
-
-        no strict 'refs';
-
-        *{$norm} = sub {
-            my $self = shift;
-            $self->_set( $field => shift ) if @_;
-            $self->get( $field );
-        };
-    }
-
     sub _normalize_field_name {
-        my $field = shift;
-
-        return unless $field;
-
-        # return cache if exists
-        return $norm_of{ $field } if exists $norm_of{ $field };
-
-        # lowercase $field
-        my $norm = lc $field;
+        my $norm = lc shift;
 
         # add initial dash if not exists
         $norm = "-$norm" unless $norm =~ /^-/;
@@ -140,11 +152,19 @@ sub push_p3p    { shift->_push( P3P        => @_ ) }
         # use dashes instead of underscores
         $norm =~ tr{_}{-};
 
-        # use alias if exists
-        $norm = '-type'   if $norm eq '-content-type';
-        $norm = '-cookie' if $norm eq '-set-cookie';
+        # return alias if exists
+        $ALIAS_OF{ $norm } || $norm;
+    }
+}
 
-        $norm_of{ $field } = $norm;
+{
+    my %IS_ATTRIBUTE = map { $_ => 1 } ATTRIBUTES;
+
+    sub _denormalize_field_name {
+        my $field = shift;
+        $field =~ s/^-//;
+        return $field if $IS_ATTRIBUTE{ $field }; 
+        ucfirst $field; 
     }
 }
 
@@ -167,21 +187,32 @@ Blosxom::Header - Missing interface to modify HTTP headers
       Last_Modified => 'Wed, 23 Sep 2009 13:36:33 GMT',
   );
 
-  my $status = $header->get( 'Status' );
-  my $bool   = $header->exists( 'ETag' );
-
+  my $status  = $header->get( 'Status' );
+  my $bool    = $header->exists( 'ETag' );
   my @deleted = $header->delete( qw/Content_Disposition Content_Length/ );
 
   $header->push_cookie( @cookies );
-  $header->push_p3p( @p3p );
 
-  $header->{header}; # same reference as $blosxom::header
+  $header->clear;
+
+  # tie() interface (EXPERIMENTAL)
+
+  tie my %header, 'Blosxom::Header';
+
+  $header{Status} = '304 Not Modified';
+
+  my $value   = $header{Status}; 
+  my $bool    = exists $header{Status}; 
+  my $deleted = delete $header{Status};
+  my @keys    = keys %header;
+
+  %header = ();
 
 =head1 DESCRIPTION
 
 Blosxom, an weblog application, exports a global variable $header
 which is a reference to hash. This application passes $header L<CGI>::header()
-to generate HTTP response headers.
+to generate HTTP headers.
 
   package blosxom;
   use CGI;
@@ -283,6 +314,10 @@ push_cookie().
 
   $header->push_p3p( qw/foo bar/ );
 
+=item $header->clear
+
+  This will remove all header fields.
+
 =back
 
 =head2 ACCESSORS
@@ -357,6 +392,12 @@ In either case, the outgoing header will be formatted as:
 
   P3P: policyref="/w3c/p3p.xml" CP="CAO DSP LAW CURa"
 
+=item $header->status
+
+Represents the Status header.
+
+  $header->status( '304 Not Modified' );
+
 =item $header->target
 
 Represents the Window-Target header.
@@ -372,8 +413,6 @@ The Content-Type header indicates the media type of the message content.
 =back
 
 =head1 DEPENDENCIES
-
-Perl 5.8.9 or higher.
 
 L<Blosxom 2.0.0|http://blosxom.sourceforge.net/> or higher.
 

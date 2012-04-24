@@ -68,5 +68,8 @@ __DATA__
 --- input:    -cookie
 --- expected: -cookie
 ===
+--- input:    -cookies
+--- expected: -cookie
+===
 --- input:    -set-cookie
 --- expected: -cookie

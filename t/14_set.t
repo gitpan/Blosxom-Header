@@ -58,10 +58,4 @@ use Blosxom::Header;
     is_deeply $header->{header}, $expected, 'set p3p arrayref';
 }
 
-{
-    my $header = Blosxom::Header->new({});
-    eval { $header->set( Foo => [ 'foo', 'bar' ] ) };
-    like $@, qr{^The -foo header can't be an ARRAY reference};
-}
-
 done_testing;
