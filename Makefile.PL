@@ -11,6 +11,5 @@ test_requires 'Test::Base';
 test_requires 'Test::More' => '0.98';
 test_requires 'Test::Pod';
 test_requires 'Test::Warn';
-test_requires 'YAML';
 
 WriteAll;

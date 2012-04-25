@@ -1,13 +1,147 @@
 =encoding utf-8
 
-=head1 NAME
+=head1 名前
 
-Blosxom::Header::ja - Japanese document
+Blosxom::Header::ja - 一意に HTTP ヘッダを指定する
 
-=head1 SYNOPSIS
+=head1 概要
 
-=head1 DESCRIPTION
+  use Blosxom::Header;
 
-=head1 AUTHOR
+  my $header = Blosxom::Header->new;
 
-=head1 COPYRIGHT AND LICENSE
+  $header->set(
+      Status        => '304 Not Modified',
+      Last_Modified => 'Wed, 23 Sep 2009 13:36:33 GMT',
+  );
+
+  my $status  = $header->get( 'Status' );
+  my $bool    = $header->exists( 'ETag' );
+  my @deleted = $header->delete( qw/Content_Disposition Content_Length/ );
+
+  $header->push_cookie( @cookies );
+  $header->push_p3p( @p3p );
+
+  $header->clear;
+
+=head1 仕様
+
+ブロッサムは単一の CGI スクリプトとして動作する、
+ウェブログ・アプリケーションの一つである。
+このアプリケーションは、$header というハッシュのリファレンスをグローバル化する。
+$header は古き良き CGI モジュールの header() 関数に渡され、HTTP ヘッダを生成する。
+
+  package blosxom;
+  use CGI;
+  our $header = { -type => 'text/html' };
+  # プラグインを読み込む
+  print CGI::header( $header );
+
+header() は $header のキーについて、大文字と小文字を区別しない。
+また、キーの先頭にハイフンを付加するかどうかも任意だ。
+他方、ハッシュのキーは大文字と小文字を区別する。
+したがって、複数のプラグインが共存するような状況では、一意に $header
+を操作することができない。
+
+このモジュールは、$header を操作するためのインターフェイスである。
+具体的には、キーの大文字と小文字を区別しないハッシュとして実装した。
+
+=head2 メソッド
+
+=over 4
+
+=item $header = Blosxom::Header->new
+
+Blosxom::Header オブジェクトを作る。
+
+=item $header->set( $field => $value )
+
+=item $header->set( $f1 => $v1, $f2 => $v2, ... )
+
+$field で指定したフィールドに、$value を代入する。
+フィールド名は大文字と小文字を区別しない。
+またハイフンの代わりに、アンダーバーを使うこともできる。
+
+$value は基本的に文字列をとる。
+特に、フィールド名として 'Set_Cookie' あるいは 'P3P'
+を指定したとき、リストのリファレンスをとる。
+
+  $header->set( Set_Cookie => [ $cookie1, $cookie2 ] );
+  $header->set( P3P => [ qw/CAO DSP LAW CURa/ ] );
+
+=item $value = $header->get( $field )
+
+=item @values = $header->get( $field )
+
+引数としてフィールド名をとり、文字列を返す。
+要素が存在しなければ undef を返す。
+また、リスト・コンテキストで、リストを返す。
+
+  my @cookie = $header->get( 'Set_Cookie' );
+  my @p3p    = $header->get( 'P3P' );
+
+=item $bool = $header->exists( $field )
+
+引数としてフィールド名をとり、要素が存在するとき真を返す。
+存在しないとき偽を返す。
+
+=item @deleted = $header->delete( @fields )
+
+指定したフィールドをすべて削除する。
+削除した要素の値を返す。
+
+=item $header->push_cookie( @cookies )
+
+Set-Cookie ヘッダを追加する。
+
+=item $header->push_p3p( @p3p )
+
+=back
+
+=head2 CGI モジュール固有のパラメータ
+
+以下のメソッドは、引数をつけたとき set()、つけないとき get() として働く。
+
+=over 4
+
+=item $header->attachment
+
+=item $header->charset
+
+文字セットを指定する。
+
+=item $header->cookie
+
+=item $header->expires
+
+=item $header->nph
+
+=item $header->p3p
+
+=item $header->status
+
+=item $header->target
+
+=item $header->type
+
+メディア・タイプを指定する。
+
+=back
+
+=head1 参考文献
+
+=over 4
+
+=item L<CGI>
+
+=back
+
+=head1 作者
+
+穴澤亮 (anazawa@cpan.org)
+
+=head1 著作権
+
+Perl Artistic ライセンスに準ずる。
+
+=cut

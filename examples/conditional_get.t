@@ -1,6 +1,6 @@
 use strict;
-use FindBin;
-use lib "$FindBin::Bin/../lib";
+use FindBin qw/$Bin/;
+use lib "$Bin/../lib";
 use Test::Base;
 
 plan tests => 2 + 2 * blocks;
@@ -13,7 +13,7 @@ plan tests => 2 + 2 * blocks;
 }
 
 my $plugin = 'conditional_get';
-require "$FindBin::Bin/$plugin";
+require "$Bin/$plugin";
 
 can_ok $plugin, qw( start last );
 ok $plugin->start;
@@ -27,9 +27,9 @@ run {
     my $block = shift;
     
     # initial configuration
-    $blosxom::header = $block->input->{header};
-    $blosxom::output = $block->input->{output};
-    %ENV             = %{ $block->input->{env} };
+    local $blosxom::header = $block->input->{header};
+    local $blosxom::output = $block->input->{output};
+    local %ENV             = %{ $block->input->{env} };
 
     $plugin->last;
     

@@ -1,5 +1,8 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.03004 Apr 26th, 2012
+  - Wrote Japanese document
+
 0.03003 Apr 25th, 2012
   - added clear() and status() methods
   - implemented tie() interface (EXPERIMENTAL)

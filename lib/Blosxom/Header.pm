@@ -8,7 +8,7 @@ use Carp qw/carp croak/;
 use constant ATTRIBUTES
     => qw/attachment charset cookie expires nph p3p status target type/;
 
-our $VERSION = '0.03003';
+our $VERSION = '0.03004';
 
 sub new {
     my $class = shift;
@@ -134,7 +134,7 @@ sub NEXTKEY {
     _denormalize_field_name( $next_key ) if $next_key;
 }
 
-# Uilities
+# Utilities
 
 {
     my %ALIAS_OF = (
@@ -192,6 +192,7 @@ Blosxom::Header - Missing interface to modify HTTP headers
   my @deleted = $header->delete( qw/Content_Disposition Content_Length/ );
 
   $header->push_cookie( @cookies );
+  $header->push_p3p( @p3p );
 
   $header->clear;
 
@@ -210,9 +211,9 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
 =head1 DESCRIPTION
 
-Blosxom, an weblog application, exports a global variable $header
-which is a reference to hash. This application passes $header L<CGI>::header()
-to generate HTTP headers.
+Blosxom, an weblog application, globalizes $header which is a reference to
+hash. This application passes $header L<CGI>::header() to generate HTTP
+headers.
 
   package blosxom;
   use CGI;
@@ -256,7 +257,7 @@ We follow L<HTTP::Headers>' way:
   => operator, you can use '_' as a replacement for '-' in header names."
 
 The $value argument must be a plain string, except for when the Set-Cookie
-or P3P response header is specified.
+or P3P header is specified.
 In exceptional cases, $value may be a reference to an array.
 
   $header->set( Set_Cookie => [ $cookie1, $cookie2 ] );
@@ -316,15 +317,15 @@ push_cookie().
 
 =item $header->clear
 
-  This will remove all header fields.
+This will remove all header fields.
 
 =back
 
-=head2 ACCESSORS
+=head2 ATTRIBUTES
 
-These methods can both be used to get() and set() the value of a header.
-The header value is set if you pass an argument to the method.
-If the given header didn't exists then undef is returned.
+These methods can both be used to get() and set() the value of an attribute.
+The attribute value is set if you pass an argument to the method.
+If the given attribute didn't exists then undef is returned.
 
 =over 4
 
@@ -345,6 +346,8 @@ Represents the character set sent to the browser.
 If not provided, defaults to ISO-8859-1.
 
   $header->charset( 'utf-8' );
+
+NOTE: If $header->type() contains 'charset', this attribute will be ignored.
 
 =item $header->cookie
 
@@ -407,8 +410,14 @@ Represents the Window-Target header.
 =item $header->type
 
 The Content-Type header indicates the media type of the message content.
+If not defined, defaults to 'text/html'.
 
   $header->type( 'text/plain' );
+
+NOTE: If you don't want to output the Content-Type header, 
+you have to set to an empty string:
+
+  $header->type( q{} );
 
 =back
 
