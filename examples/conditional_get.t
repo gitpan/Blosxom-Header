@@ -2,20 +2,21 @@ use strict;
 use FindBin qw/$Bin/;
 use lib "$Bin/../lib";
 use Test::Base;
+use Blosxom::Header;
 
 plan tests => 2 + 2 * blocks;
 
 {
     package blosxom;
     our $static_entries = 0;
-    our $header;
+    our $header = {};
     our $output;
 }
 
 my $plugin = 'conditional_get';
 require "$Bin/$plugin";
 
-can_ok $plugin, qw( start last );
+can_ok $plugin, qw/start last/;
 ok $plugin->start;
 
 filters {
@@ -24,17 +25,20 @@ filters {
 };
 
 run {
-    my $block = shift;
+    my $block    = shift;
+    my $input    = $block->input;
+    my $expected = $block->expected;
     
     # initial configuration
-    local $blosxom::header = $block->input->{header};
-    local $blosxom::output = $block->input->{output};
-    local %ENV             = %{ $block->input->{env} };
+    local $blosxom::output = $input->{output};
+    local %ENV = %{ $input->{env} };
+    tie my %header, 'Blosxom::Header';
+    %header = %{ $input->{header} };
 
     $plugin->last;
     
-    is_deeply $blosxom::header, $block->expected->{header};
-    is        $blosxom::output, $block->expected->{output};
+    is_deeply $blosxom::header, $expected->{header};
+    is        $blosxom::output, $expected->{output};
 };
 
 __DATA__
@@ -62,7 +66,7 @@ output: abcdj
 header:
     -type:   ''
     -etag:   Foo
-    -status: 304 Not Modified
+    Status: 304 Not Modified
 output: ''
 ===
 --- input
@@ -77,7 +81,7 @@ output: abcdj
 header:
     -type:          ''
     -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
-    -status:        304 Not Modified
+    Status:        304 Not Modified
 output: ''
 ===
 --- input
@@ -106,7 +110,7 @@ output: abcdj
 header:
     -type:          ''
     -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
-    -status:        304 Not Modified
+    Status:        304 Not Modified
 output: ''
 ===
 --- input

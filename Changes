@@ -1,5 +1,11 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.03005 May 4th, 2012
+  - Restricted the instantiation of Blosxom::Header to one object
+  - Added instance() and has_instance() methods.
+  - new() is deprecated and will be removed in 0.04.
+    Use instance() instead.
+
 0.03004 Apr 26th, 2012
   - Wrote Japanese document
 

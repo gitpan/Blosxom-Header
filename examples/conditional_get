@@ -15,7 +15,7 @@ sub start { !$blosxom::static_entries }
 
 sub last {
     return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
-    my $header = Blosxom::Header->new;
+    my $header = Blosxom::Header->instance;
 
     if ( etag_matches( $header ) or not_modified_since( $header ) ) {
         $header->delete( qw/Content-Disposition attachment Content-Length/ );

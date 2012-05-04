@@ -4,69 +4,164 @@ use strict;
 use warnings;
 use Carp qw/carp croak/;
 
-# parameters recognized by CGI::header()
+our $VERSION = '0.03005';
+
+# Parameters recognized by CGI::header()
 use constant ATTRIBUTES
     => qw/attachment charset cookie expires nph p3p status target type/;
 
-our $VERSION = '0.03004';
+# Convention
+#   $field : raw field name (e.g. Foo-Bar)
+#   $norm  : normalized field name (e.g. foo_bar)
 
-sub new {
-    my $class = shift;
-    my $header = shift || $blosxom::header;
-    croak( 'Not a HASH reference' ) unless ref $header eq 'HASH';
-    bless { header => $header }, $class;
-}
+{
+    my $INSTANCE;
 
-sub get {
-    my $self = shift;
-    my $field = _normalize_field_name( shift );
-    my $value = $self->{header}->{$field};
-    return $value unless ref $value eq 'ARRAY';
-    return @{ $value } if wantarray;
-    return $value if defined wantarray;
-}
+    sub instance {
+        my $class = shift;
 
-sub delete {
-    my $self = shift;
-    my @fields = map { _normalize_field_name( $_ ) } @_;
-    delete @{ $self->{header} }{ @fields };
-}
+        return $INSTANCE if defined $INSTANCE;
 
-sub exists {
-    my $self = shift;
-    my $field = _normalize_field_name( shift );
-    exists $self->{header}->{$field};
-}
-
-sub clear {
-    my $self = shift;
-    %{ $self->{header} } = ();
-}
-
-sub set {
-    my ( $self, @fields ) = @_;
-
-    if ( @fields == 2 ) {
-        $self->_set( @fields );
-    }
-    elsif ( @fields % 2 == 0 ) {
-        while ( my ( $field, $value ) = splice @fields, 0, 2 ) {
-            $self->_set( $field => $value );
+        unless ( ref $blosxom::header eq 'HASH' ) {
+            croak q{$blosxom::header hasn't been initialized yet};
         }
+
+        my %header;
+        while ( my ( $field, $value ) = each %{ $blosxom::header } ) {
+            my $norm = _normalize_field_name( $field );
+            $header{ $norm } = {
+                key   => $field,
+                value => $value,
+            };
+        }
+
+        $INSTANCE = bless \%header, $class;
+    }
+
+    sub has_instance { $INSTANCE }
+}
+
+sub TIEHASH { shift->instance }
+
+sub FETCH {
+    my $self = shift;
+    my $norm = _normalize_field_name( shift );
+    return unless exists $self->{ $norm };
+    $self->{$norm}->{value};
+}
+
+sub STORE {
+    my ( $self, $field, $value ) = @_;
+
+    my $norm = _normalize_field_name( $field );
+
+    if ( my $old = $self->{ $norm } ) {
+        $blosxom::header->{ $old->{key} } = $value; # overwrite
+        $old->{value} = $value;
     }
     else {
-        croak( 'Odd number of elements are passed to set()' );
+        $blosxom::header->{ $field } = $value;
+        $self->{ $norm } = {
+            key   => $field,
+            value => $value,
+        };
     }
 
     return;
 }
 
-sub _set {
-    my $self  = shift;
-    my $field = _normalize_field_name( shift );
-    my $value = shift;
+sub EXISTS {
+    my $self = shift;
+    my $norm = _normalize_field_name( shift );
+    exists $self->{ $norm };
+}
 
-    $self->{header}->{$field} = $value;
+sub DELETE {
+    my $self = shift;
+    my $norm = _normalize_field_name( shift );
+    my $deleted = delete $self->{ $norm };
+    delete $blosxom::header->{ $deleted->{key} } if $deleted;
+}
+
+sub CLEAR {
+    my $self = shift;
+    %{ $self } = %{ $blosxom::header } = ();
+}
+
+sub FIRSTKEY {
+    my $self = shift;
+    keys %{ $self };
+    my $first_key = each %{ $self };
+    return unless defined $first_key;
+    $self->{$first_key}->{key};
+}
+
+sub NEXTKEY {
+    my $self = shift;
+    my $next_key = each %{ $self };
+    return unless defined $next_key;
+    $self->{$next_key}->{key};
+}
+
+{
+    my %ALIAS_OF = (
+        content_type => 'type',
+        set_cookie   => 'cookie',
+        cookies      => 'cookie',
+    );
+
+    sub _normalize_field_name {
+        my $norm = lc shift;
+
+        # get rid of an initial dash if exists
+        $norm =~ s/^-//;
+
+        # use underscores instead of dashes 
+        $norm =~ tr{-}{_};
+
+        $ALIAS_OF{ $norm } || $norm;
+    }
+}
+
+# HTTP::Headers-like interface
+
+# new() is deprecated and will be removed in 0.04.
+# use instance() istead
+sub new { shift->instance }
+
+sub exists { shift->EXISTS( @_ ) }
+sub clear  { shift->CLEAR        }
+
+sub delete {
+    my $self = shift;
+    map { $self->DELETE( $_ ) } @_;
+}
+
+sub get {
+    my $self = shift;
+    my $value = $self->FETCH( shift );
+    return $value unless ref $value eq 'ARRAY';
+    return @{ $value } if wantarray;
+    return $value->[0] if defined wantarray;
+    carp 'Useless use of get() in void context';
+}
+
+sub set {
+    my ( $self, @fields ) = @_;
+
+    return unless @fields;
+
+    if ( @fields == 2 ) {
+        $self->STORE( @fields );
+    }
+    elsif ( @fields % 2 == 0 ) {
+        while ( my ( $field, $value ) = splice @fields, 0, 2 ) {
+            $self->STORE( $field => $value );
+        }
+    }
+    else {
+        croak 'Odd number of elements are passed to set()';
+    }
 
     return;
 }
@@ -75,96 +170,38 @@ sub push_cookie { shift->_push( -cookie => @_ ) }
 sub push_p3p    { shift->_push( -p3p    => @_ ) }
 
 sub _push {
-    my $self   = shift;
-    my $field  = _normalize_field_name( shift );
-    my @values = @_;
+    my ( $self, $field, @values ) = @_;
 
     unless ( @values ) {
-        carp( 'Useless use of _push() with no values' );
+        carp 'Useless use of _push() with no values';
         return;
     }
 
-    if ( my $old_value = $self->{header}->{$field} ) {
-        return push @{ $old_value }, @values if ref $old_value eq 'ARRAY';
-        unshift @values, $old_value;
+    if ( my $value = $self->FETCH( $field ) ) {
+        return push @{ $value }, @values if ref $value eq 'ARRAY';
+        unshift @values, $value;
     }
 
-    $self->_set( $field => @values > 1 ? \@values : $values[0] );
+    $self->STORE( $field => @values > 1 ? \@values : $values[0] );
 
-    # returns the number of elements in @values like CORE::push
     scalar @values if defined wantarray;
 }
 
-# Will be removed in 0.04
+# push() is deprecated and will be removed in 0.04.
+# use push_cookie() or push_p3p() instead
 sub push { shift->_push( @_ ) }
 
 # make accessors
-for my $method ( ATTRIBUTES ) {
-    my $slot  = __PACKAGE__ . "::$method";
-    my $field = "-$method";
+for my $attr ( ATTRIBUTES ) {
+    my $slot  = __PACKAGE__ . "::$attr";
+    my $field = "-$attr";
 
     no strict 'refs';
 
     *$slot = sub {
         my $self = shift;
-        $self->_set( $field => shift ) if @_;
+        $self->STORE( $field => shift ) if @_;
         $self->get( $field );
-    };
-}
-
-# tie() interface 
-
-sub TIEHASH { shift->new( @_ )    }
-sub FETCH   { shift->get( @_ )    }
-sub STORE   { shift->_set( @_ )   }
-sub EXISTS  { shift->exists( @_ ) }
-sub DELETE  { shift->delete( @_ ) }
-sub CLEAR   { shift->clear        }
-
-sub FIRSTKEY {
-    my $self = shift;
-    keys %{ $self->{header} };
-    my $first_key = each %{ $self->{header} };
-    _denormalize_field_name( $first_key ) if $first_key;
-}
-
-sub NEXTKEY {
-    my $self = shift;
-    my $next_key = each %{ $self->{header} };
-    _denormalize_field_name( $next_key ) if $next_key;
-}
-
-# Utilities
-
-{
-    my %ALIAS_OF = (
-        '-content-type' => '-type',
-        '-set-cookie'   => '-cookie',
-        '-cookies'      => '-cookie',
-    );
-
-    sub _normalize_field_name {
-        my $norm = lc shift;
-
-        # add initial dash if not exists
-        $norm = "-$norm" unless $norm =~ /^-/;
-
-        # use dashes instead of underscores
-        $norm =~ tr{_}{-};
-
-        # return alias if exists
-        $ALIAS_OF{ $norm } || $norm;
-    }
-}
-
-{
-    my %IS_ATTRIBUTE = map { $_ => 1 } ATTRIBUTES;
-
-    sub _denormalize_field_name {
-        my $field = shift;
-        $field =~ s/^-//;
-        return $field if $IS_ATTRIBUTE{ $field }; 
-        ucfirst $field; 
     }
 }
 
@@ -180,7 +217,16 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
   use Blosxom::Header;
 
-  my $header = Blosxom::Header->new;
+  my $header = tie my %header, 'Blosxom::Header';
+
+  $header{status} = '304 Not Modified';
+
+  my $value   = $header{status}; 
+  my $bool    = exists $header{satus}; 
+  my $deleted = delete $header{status};
+  my @keys    = keys %header;
+
+  %header = ();
 
   $header->set(
       Status        => '304 Not Modified',
@@ -189,25 +235,12 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
   my $status  = $header->get( 'Status' );
   my $bool    = $header->exists( 'ETag' );
-  my @deleted = $header->delete( qw/Content_Disposition Content_Length/ );
+  my @deleted = $header->delete( qw/Content-Disposition Content-Length/ );
 
   $header->push_cookie( @cookies );
   $header->push_p3p( @p3p );
 
   $header->clear;
-
-  # tie() interface (EXPERIMENTAL)
-
-  tie my %header, 'Blosxom::Header';
-
-  $header{Status} = '304 Not Modified';
-
-  my $value   = $header{Status}; 
-  my $bool    = exists $header{Status}; 
-  my $deleted = delete $header{Status};
-  my @keys    = keys %header;
-
-  %header = ();
 
 =head1 DESCRIPTION
 
@@ -240,9 +273,19 @@ described below.
 
 =over 4
 
+=item $header = Blosxom::Header->instance
+
+Returns a current Blosxom::Header object instance or create a new one.
+
+=item $header = Blosxom::Header->has_instance
+
+Returns a reference to existing Blosxom::Header instance or undef if none is
+defiend.
+
 =item $header = Blosxom::Header->new
 
-Creates a new Blosxom::Header object.
+This method is deprecated and will be removed in 0.04.
+Use instance() instead.
 
 =item $header->set( $field => $value )
 
@@ -251,10 +294,7 @@ Creates a new Blosxom::Header object.
 Sets the value of one or more header fields.
 Accepts a list of named arguments.
 The header field name ($field) isn't case-sensitive.
-We follow L<HTTP::Headers>' way:
-
-  "To make the life easier for perl users who wants to avoid quoting before the
-  => operator, you can use '_' as a replacement for '-' in header names."
+You can use '_' as a replacement for '-' in header names.
 
 The $value argument must be a plain string, except for when the Set-Cookie
 or P3P header is specified.
@@ -270,7 +310,7 @@ In exceptional cases, $value may be a reference to an array.
 Returns a value of the specified HTTP header.
 In list context, a list of scalars is returned.
 
-  my @cookie = $header->get( 'Set_Cookie' );
+  my @cookie = $header->get( 'Set-Cookie' );
   my @p3p    = $header->get( 'P3P' );
 
 =item $bool = $header->exists( $field )
@@ -301,15 +341,6 @@ An example convension is:
 Pushes the Set-Cookie headers onto HTTP headers.
 Returns the number of the elements following the completed
 push_cookie().  
-
-  use CGI::Cookie;
-
-  my $cookie = CGI::Cookie->new(
-      -name  => 'ID',
-      -value => 123456,
-  );
-
-  $header->push_cookie( $cookie );
 
 =item $header->push_p3p( @p3p )
 
@@ -427,7 +458,7 @@ L<Blosxom 2.0.0|http://blosxom.sourceforge.net/> or higher.
 
 =head1 SEE ALSO
 
-L<CGI>
+L<CGI>, L<Class::Singleton>, L<perltie>
 
 =head1 AUTHOR
 
