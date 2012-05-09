@@ -2,52 +2,39 @@ package Blosxom::Header;
 use 5.008_009;
 use strict;
 use warnings;
-use Carp qw/carp croak/;
 
-our $VERSION = '0.03005';
+our $VERSION = '0.04000';
 
-# Parameters recognized by CGI::header()
-use constant ATTRIBUTES
-    => qw/attachment charset cookie expires nph p3p status target type/;
-
-# Convention
+# Naming conventions
 #   $field : raw field name (e.g. Foo-Bar)
 #   $norm  : normalized field name (e.g. foo_bar)
 
-{
-    my $INSTANCE;
+our $INSTANCE;
 
-    sub instance {
-        my $class = shift;
+sub TIEHASH {
+    my $class = shift;
 
-        return $INSTANCE if defined $INSTANCE;
+    return $INSTANCE if defined $INSTANCE;
 
-        unless ( ref $blosxom::header eq 'HASH' ) {
-            croak q{$blosxom::header hasn't been initialized yet};
-        }
-
-        my %header;
-        while ( my ( $field, $value ) = each %{ $blosxom::header } ) {
-            my $norm = _normalize_field_name( $field );
-            $header{ $norm } = {
-                key   => $field,
-                value => $value,
-            };
-        }
-
-        $INSTANCE = bless \%header, $class;
+    unless ( ref $blosxom::header eq 'HASH' ) {
+        require Carp;
+        Carp::croak q{$blosxom::header hasn't been initialized yet};
     }
 
-    sub has_instance { $INSTANCE }
-}
+    my %header;
+    while ( my ( $field, $value ) = each %{ $blosxom::header } ) {
+        my $norm = _normalize_field_name( $field );
+        $header{ $norm } = $field;
+    }
 
-sub TIEHASH { shift->instance }
+    $INSTANCE = bless \%header, $class;
+}
 
 sub FETCH {
     my $self = shift;
     my $norm = _normalize_field_name( shift );
-    return unless exists $self->{ $norm };
-    $self->{$norm}->{value};
+    my $field = $self->{ $norm };
+    $blosxom::header->{ $field } if $field;
 }
 
 sub STORE {
@@ -55,19 +42,28 @@ sub STORE {
 
     my $norm = _normalize_field_name( $field );
 
-    if ( my $old = $self->{ $norm } ) {
-        $blosxom::header->{ $old->{key} } = $value; # overwrite
-        $old->{value} = $value;
+    if ( exists $self->{ $norm } ) {
+        $field = $self->{ $norm };
     }
     else {
-        $blosxom::header->{ $field } = $value;
-        $self->{ $norm } = {
-            key   => $field,
-            value => $value,
-        };
+        $self->{ $norm } = $field;
     }
 
+    $blosxom::header->{ $field } = $value;
+
     return;
+}
+
+sub DELETE {
+    my $self = shift;
+    my $norm = _normalize_field_name( shift );
+    my $deleted = delete $self->{ $norm };
+    delete $blosxom::header->{ $deleted } if $deleted;
+}
+
+sub CLEAR {
+    my $self = shift;
+    %{ $self } = %{ $blosxom::header } = ();
 }
 
 sub EXISTS {
@@ -76,31 +72,19 @@ sub EXISTS {
     exists $self->{ $norm };
 }
 
-sub DELETE {
-    my $self = shift;
-    my $norm = _normalize_field_name( shift );
-    my $deleted = delete $self->{ $norm };
-    delete $blosxom::header->{ $deleted->{key} } if $deleted;
-}
-
-sub CLEAR {
-    my $self = shift;
-    %{ $self } = %{ $blosxom::header } = ();
-}
-
 sub FIRSTKEY {
     my $self = shift;
     keys %{ $self };
     my $first_key = each %{ $self };
     return unless defined $first_key;
-    $self->{$first_key}->{key};
+    $self->{ $first_key };
 }
 
 sub NEXTKEY {
     my $self = shift;
     my $next_key = each %{ $self };
     return unless defined $next_key;
-    $self->{$next_key}->{key};
+    $self->{ $next_key };
 }
 
 {
@@ -123,86 +107,9 @@ sub NEXTKEY {
     }
 }
 
-# HTTP::Headers-like interface
-
-# new() is deprecated and will be removed in 0.04.
-# use instance() istead
-sub new { shift->instance }
-
-sub exists { shift->EXISTS( @_ ) }
-sub clear  { shift->CLEAR        }
-
-sub delete {
-    my $self = shift;
-    map { $self->DELETE( $_ ) } @_;
-}
-
-sub get {
-    my $self = shift;
-    my $value = $self->FETCH( shift );
-    return $value unless ref $value eq 'ARRAY';
-    return @{ $value } if wantarray;
-    return $value->[0] if defined wantarray;
-    carp 'Useless use of get() in void context';
-}
-
-sub set {
-    my ( $self, @fields ) = @_;
-
-    return unless @fields;
-
-    if ( @fields == 2 ) {
-        $self->STORE( @fields );
-    }
-    elsif ( @fields % 2 == 0 ) {
-        while ( my ( $field, $value ) = splice @fields, 0, 2 ) {
-            $self->STORE( $field => $value );
-        }
-    }
-    else {
-        croak 'Odd number of elements are passed to set()';
-    }
-
-    return;
-}
-
-sub push_cookie { shift->_push( -cookie => @_ ) }
-sub push_p3p    { shift->_push( -p3p    => @_ ) }
-
-sub _push {
-    my ( $self, $field, @values ) = @_;
-
-    unless ( @values ) {
-        carp 'Useless use of _push() with no values';
-        return;
-    }
-
-    if ( my $value = $self->FETCH( $field ) ) {
-        return push @{ $value }, @values if ref $value eq 'ARRAY';
-        unshift @values, $value;
-    }
-
-    $self->STORE( $field => @values > 1 ? \@values : $values[0] );
-
-    scalar @values if defined wantarray;
-}
-
-# push() is deprecated and will be removed in 0.04.
-# use push_cookie() or push_p3p() instead
-sub push { shift->_push( @_ ) }
-
-# make accessors
-for my $attr ( ATTRIBUTES ) {
-    my $slot  = __PACKAGE__ . "::$attr";
-    my $field = "-$attr";
-
-    no strict 'refs';
-
-    *$slot = sub {
-        my $self = shift;
-        $self->STORE( $field => shift ) if @_;
-        $self->get( $field );
-    }
+sub instance {
+    require Blosxom::Header::Class;
+    Blosxom::Header::Class->instance;
 }
 
 1;
@@ -217,16 +124,7 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
   use Blosxom::Header;
 
-  my $header = tie my %header, 'Blosxom::Header';
-
-  $header{status} = '304 Not Modified';
-
-  my $value   = $header{status}; 
-  my $bool    = exists $header{satus}; 
-  my $deleted = delete $header{status};
-  my @keys    = keys %header;
-
-  %header = ();
+  my $header = Blosxom::Header->instance;
 
   $header->set(
       Status        => '304 Not Modified',
@@ -277,16 +175,6 @@ described below.
 
 Returns a current Blosxom::Header object instance or create a new one.
 
-=item $header = Blosxom::Header->has_instance
-
-Returns a reference to existing Blosxom::Header instance or undef if none is
-defiend.
-
-=item $header = Blosxom::Header->new
-
-This method is deprecated and will be removed in 0.04.
-Use instance() instead.
-
 =item $header->set( $field => $value )
 
 =item $header->set( $f1 => $v1, $f2 => $v2, ... )
@@ -321,20 +209,6 @@ Returns a Boolean value telling whether the specified HTTP header exists.
 
 Deletes the specified elements from HTTP headers.
 Returns values of deleted elements.
-
-=item $header->push( $field => @values )
-
-This method is deprecated and will be removed in 0.04.
-Use push_cookie() or push_p3p() instead.
-An example convension is:
-
-  $header->push( Set_Cookie => @cookies );
-  $header->push( P3P => @p3p );
-
-  # Becomes
-
-  $header->push_cookie( @cookies );
-  $header->push_p3p( @p3p );
 
 =item $header->push_cookie( @cookies )
 
@@ -458,7 +332,13 @@ L<Blosxom 2.0.0|http://blosxom.sourceforge.net/> or higher.
 
 =head1 SEE ALSO
 
-L<CGI>, L<Class::Singleton>, L<perltie>
+=over 4
+
+L<CGI>,
+L<Class::Singleton>,
+L<perltie>
+
+=back
 
 =head1 AUTHOR
 

@@ -4,20 +4,28 @@ use lib "$Bin/../lib";
 use Test::Base;
 use Blosxom::Header;
 
-plan tests => 2 + 2 * blocks;
+plan tests => 3 + 2 * blocks;
 
 {
     package blosxom;
-    our $static_entries = 0;
-    our $header = {};
+    our $static_entries;
+    our $header;
     our $output;
 }
 
 my $plugin = 'conditional_get';
 require "$Bin/$plugin";
-
 can_ok $plugin, qw/start last/;
-ok $plugin->start;
+
+{
+    local $blosxom::static_entries = 0;
+    ok $plugin->start, 'start() returns true when dynamic';
+}
+
+{
+    local $blosxom::static_entries = 1;
+    ok !$plugin->start, 'start() returns false when static';
+}
 
 filters {
     input    => 'yaml',
@@ -29,11 +37,11 @@ run {
     my $input    = $block->input;
     my $expected = $block->expected;
     
-    # initial configuration
+    # Initial configuration
     local $blosxom::output = $input->{output};
+    local $blosxom::header = $input->{header};
+    local $Blosxom::Header::INSTANCE;
     local %ENV = %{ $input->{env} };
-    tie my %header, 'Blosxom::Header';
-    %header = %{ $input->{header} };
 
     $plugin->last;
     
@@ -66,7 +74,7 @@ output: abcdj
 header:
     -type:   ''
     -etag:   Foo
-    Status: 304 Not Modified
+    status:  304 Not Modified
 output: ''
 ===
 --- input
@@ -81,7 +89,7 @@ output: abcdj
 header:
     -type:          ''
     -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
-    Status:        304 Not Modified
+    status:         304 Not Modified
 output: ''
 ===
 --- input
@@ -110,7 +118,7 @@ output: abcdj
 header:
     -type:          ''
     -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
-    Status:        304 Not Modified
+    status:         304 Not Modified
 output: ''
 ===
 --- input
