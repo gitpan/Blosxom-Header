@@ -1,5 +1,9 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.04001 May 10th, 2012
+  - Removed Blosxom::Header::Class
+  - Fixed compilation error
+
 0.04000 May 9th, 2012
   - Removed push(), new() and has_instance() methods
   - Added Blosxom::Header::Class

@@ -10,7 +10,7 @@ use Test::More;
 eval { tie my %header, 'Blosxom::Header' };
 like $@, qr{^\$blosxom::header hasn't been initialized yet};
 
-# initialize
+# Initialize
 $blosxom::header = { -foo => 'bar' };
 
 tie my %header, 'Blosxom::Header';
@@ -28,6 +28,9 @@ is_deeply $blosxom::header, {}, 'CLEAR()';
 
 $header{-foo} = 'bar';
 is_deeply $blosxom::header, { -foo => 'bar' }, 'STORE()';
+
+$header{Foo} = 'baz';
+is_deeply $blosxom::header, { -foo => 'baz' }, 'STORE(), not case-sensitive';
 
 %header = (
     -foo => 'bar',

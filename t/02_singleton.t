@@ -1,7 +1,6 @@
 use strict;
 use Blosxom::Header;
-use Blosxom::Header::Class;
-use Test::More tests => 10;
+use Test::More tests => 5;
 
 {
     package blosxom;
@@ -10,28 +9,11 @@ use Test::More tests => 10;
 
 ok !$Blosxom::Header::INSTANCE, 'no Blosxom::Header instance yet';
 
-{
-    my $h1 = tie my %h1, 'Blosxom::Header';
-    ok $h1, 'created Blosxom::Header instance 1';
+my $h1 = Blosxom::Header->instance;
+ok $h1, 'created Blosxom::Header instance 1';
 
-    my $h2 = tie my %h2, 'Blosxom::Header';
-    ok $h2, 'created Blosxom::Header instance 2';
+my $h2 = Blosxom::Header->instance;
+ok $h2, 'created Blosxom::Header instance 2';
 
-    is $h1, $h2, 'both instances are the same object';
-    is $Blosxom::Header::INSTANCE, $h1, 'Blosxom::Header has instance';
-}
-
-ok !$Blosxom::Header::Class::INSTANCE, 'no Blosxom::Header::Class instance yet';
-
-{
-    my $h1 = Blosxom::Header::Class->instance;
-    ok $h1, 'created Blosxom::Header::Class instance 1';
-
-    my $h2 = Blosxom::Header::Class->instance;
-    ok $h2, 'created Blosxom::Header::Class instance 2';
-
-    is $h1, $h2, 'both instances are the same object';
-    is $Blosxom::Header::Class::INSTANCE, $h1, 'Blosxom::Header::Class has instance';
-}
-
-
+is $h1, $h2, 'both instances are the same object';
+is $Blosxom::Header::INSTANCE, $h1, 'Blosxom::Header has instance';

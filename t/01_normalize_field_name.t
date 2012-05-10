@@ -1,6 +1,7 @@
 use strict;
 use Blosxom::Header;
 use Test::Base;
+
 plan tests => 1 * blocks;
 
 run {
@@ -12,64 +13,64 @@ run {
 __DATA__
 ===
 --- input:    -foo
---- expected: foo
+--- expected: -foo
 ===
 --- input:    -Foo
---- expected: foo
+--- expected: -foo
 ===
 --- input:    foo
---- expected: foo
+--- expected: -foo
 ===
 --- input:    Foo
---- expected: foo
+--- expected: -foo
 ===
 --- input:    -foo-bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    -Foo-bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    -Foo-Bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    -foo_bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    -Foo_bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    -Foo_Bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    foo-bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    Foo-bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    Foo-Bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    foo_bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    Foo_bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    Foo_Bar
---- expected: foo_bar
+--- expected: -foo_bar
 ===
 --- input:    -type
---- expected: type
+--- expected: -type
 === 
---- input:    -content-type
---- expected: type
+--- input:    -content_type
+--- expected: -type
 ===
 --- input:    -cookie
---- expected: cookie
+--- expected: -cookie
 ===
 --- input:    -cookies
---- expected: cookie
+--- expected: -cookie
 ===
---- input:    -set-cookie
---- expected: cookie
+--- input:    -set_cookie
+--- expected: -cookie

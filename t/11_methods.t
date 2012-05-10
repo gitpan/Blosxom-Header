@@ -5,21 +5,21 @@ use Test::Warn;
 
 {
     package blosxom;
-    our $header;
+    our $header = { -cookie => ['foo', 'bar'] };
 }
 
-eval { Blosxom::Header->instance };
-like $@, qr{^\$blosxom::header hasn't been initialized yet};
-
-# initialize
-$blosxom::header = { -cookie => ['foo', 'bar'] };
 my $header = Blosxom::Header->instance;
 
-isa_ok $header, 'Blosxom::Header::Class';
+isa_ok $header, 'Blosxom::Header';
+
 can_ok $header, qw(
-    exists clear delete get set push_cookie push_p3p
-    attachment charset cookie expires nph p3p status target type
+    exists clear delete get set
+    attachment charset expires nph status target type
+    cookie push_cookie
+    p3p    push_p3p
 );
+
+ok $header->exists( 'cookie' ), 'exists()';
 
 warning_is { $header->get( 'cookie' ) }
     'Useless use of get() in void context';
@@ -64,6 +64,6 @@ $header->set(
 is $header->expires, undef;
 is $header->expires( 'now' ), 'now';
 is $header->expires, 'now';
-is_deeply $blosxom::header->{expires}, 'now';
+is $blosxom::header->{-expires}, 'now';
 
 done_testing;

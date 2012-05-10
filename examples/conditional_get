@@ -16,17 +16,19 @@ sub start { !$blosxom::static_entries }
 sub last {
     return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
 
-    tie my %header, 'Blosxom::Header';
+    my $header = Blosxom::Header->instance;
 
-    if ( etag_matches( \%header ) or not_modified_since( \%header ) ) {
+    if ( etag_matches( $header ) or not_modified_since( $header ) ) {
 
-        delete @header{ qw/Content-Disposition attachment Content-Length/ };
-        $header{status} = '304 Not Modified';
+        $header->delete( qw/Content-Disposition attachment Content-Length/ );
 
         # If Content-Type isn't defined,
         # CGI::header() will add the default value.
         # And so makes it defined
-        $header{type} = q{};
+        $header->set(
+            Status       => '304 Not Modified',
+            Content_Type => q{},
+        );
 
         # Truncate output
         $blosxom::output = q{};
@@ -42,14 +44,14 @@ sub last {
 
 sub etag_matches {
     my $header = shift;
-    return unless exists $header->{ETag};
-    $header->{ETag} eq _value( $ENV{HTTP_IF_NONE_MATCH} );
+    return unless $header->exists( 'ETag' );
+    $header->get( 'ETag' ) eq _value( $ENV{HTTP_IF_NONE_MATCH} );
 }
 
 sub not_modified_since {
     my $header = shift;
-    return unless exists $header->{Last_Modified};
-    $header->{Last_Modified} eq _value( $ENV{HTTP_IF_MODIFIED_SINCE} );
+    return unless $header->exists( 'Last_Modified' );
+    $header->get( 'Last_Modified' ) eq _value( $ENV{HTTP_IF_MODIFIED_SINCE} );
 }
 
 # > IE sends wrong formatted value

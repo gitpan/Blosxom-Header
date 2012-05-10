@@ -32,4 +32,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/anazawa/p5-Blosxom-Header
-version: 0.04000
+version: 0.04001

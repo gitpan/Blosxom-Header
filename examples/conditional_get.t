@@ -74,13 +74,13 @@ output: abcdj
 header:
     -type:   ''
     -etag:   Foo
-    status:  304 Not Modified
+    -status:  304 Not Modified
 output: ''
 ===
 --- input
 header:
     -type:          text/html
-    -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
+    -last_modified: Wed, 23 Sep 2009 13:36:33 GMT
 env:
     REQUEST_METHOD:         GET
     HTTP_IF_MODIFIED_SINCE: Wed, 23 Sep 2009 13:36:33 GMT
@@ -88,14 +88,14 @@ output: abcdj
 --- expected
 header:
     -type:          ''
-    -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
-    status:         304 Not Modified
+    -last_modified: Wed, 23 Sep 2009 13:36:33 GMT
+    -status:         304 Not Modified
 output: ''
 ===
 --- input
 header:
     -type:          text/html
-    -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
+    -last_modified: Wed, 23 Sep 2009 13:36:33 GMT
 env:
     REQUEST_METHOD:         GET
     HTTP_IF_MODIFIED_SINCE: Wed, 23 Sep 2009 13:36:32 GMT
@@ -103,13 +103,13 @@ output: abcdj
 --- expected
 header:
     -type:          text/html
-    -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
+    -last_modified: Wed, 23 Sep 2009 13:36:33 GMT
 output: abcdj
 ===
 --- input
 header:
     -type:          text/html
-    -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
+    -last_modified: Wed, 23 Sep 2009 13:36:33 GMT
 env:
     REQUEST_METHOD:         GET
     HTTP_IF_MODIFIED_SINCE: Wed, 23 Sep 2009 13:36:33 GMT; length=2
@@ -117,8 +117,8 @@ output: abcdj
 --- expected
 header:
     -type:          ''
-    -last-modified: Wed, 23 Sep 2009 13:36:33 GMT
-    status:         304 Not Modified
+    -last_modified: Wed, 23 Sep 2009 13:36:33 GMT
+    -status:         304 Not Modified
 output: ''
 ===
 --- input
