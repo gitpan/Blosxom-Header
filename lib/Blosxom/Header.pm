@@ -4,11 +4,7 @@ use strict;
 use warnings;
 use Carp qw/carp croak/;
 
-our $VERSION = '0.04001';
-
-# Parameters recognized by CGI::header()
-use constant ATTRIBUTES
-    => qw/attachment charset cookie expires nph p3p status target type/;
+our $VERSION = '0.04002';
 
 # Naming conventions
 #   $field : raw field name (e.g. Foo-Bar)
@@ -18,7 +14,7 @@ our $INSTANCE;
 
 sub instance {
     my $class = shift;
-    return $INSTANCE if defined $INSTANCE;
+    return $INSTANCE if ref $INSTANCE eq __PACKAGE__;
     tie my %header, "$class";
     $INSTANCE = bless \%header, $class;
 }
@@ -28,33 +24,18 @@ sub get {
     my $value = $self->{ $field };
     return $value unless ref $value eq 'ARRAY';
     return @{ $value } if wantarray;
-    return $value->[0] if defined wantarray;
-    carp( 'Useless use of get() in void context' );
+    $value->[0];
 }
 
 sub set {
-    my ( $self, @fields ) = @_;
-
-    return unless @fields;
-
-    if ( @fields == 2 ) {
-        $self->{ $fields[0] } = $fields[1];
-    }
-    elsif ( @fields % 2 == 0 ) {
-        while ( my ( $field, $value ) = splice @fields, 0, 2 ) {
-            $self->{ $field } = $value;
-        }
-    }
-    else {
-        croak( 'Odd number of elements are passed to set()' );
-    }
-
+    my ( $self, %fields ) = @_;
+    @{ $self }{ keys %fields } = values %fields;
     return;
 }
 
 sub delete {
-    my $self = shift;
-    delete @{ $self }{ @_ };
+    my ( $self, @fields ) = @_;
+    delete @{ $self }{ @fields };
 }
 
 sub clear  { %{ $_[0] } = ()         }
@@ -78,18 +59,29 @@ sub _push {
 
     $self->{ $field } = @values > 1 ? \@values : $values[0];
 
-    return scalar @values if defined wantarray;
-    return;
+    scalar @values;
 }
 
 # Make accessors
-for my $attr ( ATTRIBUTES ) {
-    my $slot  = __PACKAGE__ . "::$attr";
+
+for my $method ( qw/attachment charset expires nph status target type/ ) {
+    my $field = "-$method";
     no strict 'refs';
-    *$slot = sub {
+    *$method = sub {
         my $self = shift;
-        $self->{ $attr } = shift if @_;
-        $self->get( $attr );
+        return $self->{ $field } = shift if @_;
+        $self->{ $field };
+    };
+}
+
+for my $method ( qw/cookie p3p/ ) {
+    my $field = "-$method";
+    no strict 'refs';
+    *$method = sub {
+        my $self = shift;
+        return $self->{ $field } = [ @_ ] if @_ > 1;
+        return $self->{ $field } = shift if @_;
+        $self->{ $field };
     };
 }
 
@@ -107,20 +99,20 @@ sub TIEHASH {
 
 sub FETCH {
     my ( $self, $field ) = @_;
-    my $norm = _normalize_field_name( $field );
+    my $norm = $self->_normalize_field_name( $field );
     $self->{header}->{$norm};
 }
 
 sub STORE {
     my ( $self, $field, $value ) = @_;
-    my $norm = _normalize_field_name( $field );
+    my $norm = $self->_normalize_field_name( $field );
     $self->{header}->{$norm} = $value;
     return;
 }
 
 sub DELETE {
     my ( $self, $field ) = @_;
-    my $norm = _normalize_field_name( $field );
+    my $norm = $self->_normalize_field_name( $field );
     delete $self->{header}->{$norm};
 }
 
@@ -131,7 +123,7 @@ sub CLEAR {
 
 sub EXISTS {
     my ( $self, $field ) = @_;
-    my $norm = _normalize_field_name( $field );
+    my $norm = $self->_normalize_field_name( $field );
     exists $self->{header}->{$norm};
 }
 
@@ -154,6 +146,7 @@ sub NEXTKEY {
     );
 
     sub _normalize_field_name {
+        my $self = shift;
         my $norm = lc shift;
 
         # add an initial dash if not exists
@@ -197,7 +190,7 @@ Blosxom::Header - Missing interface to modify HTTP headers
 =head1 DESCRIPTION
 
 Blosxom, an weblog application, globalizes $header which is a reference to
-hash. This application passes $header L<CGI>::header() to generate HTTP
+a hash. This application passes $header to L<CGI>::header() to generate HTTP
 headers.
 
   package blosxom;
@@ -207,19 +200,37 @@ headers.
   print CGI::header( $header );
 
 header() doesn't care whether keys of $header are lowecased
-nor starting with a dash.
-The problem is multiple elements of $header may specify the same field:
+nor starting with a dash, and also transliterates underscores into dashes
+in field names.
 
-  package plugin_foo;
-  $blosxom::header->{-status} = '304 Not Modified';
+=head2 HOW THIS MODULE NORMALIZES FIELD NAMES
 
-  package plugin_bar;
-  $blosxom::header->{Status} = '404 Not Found';
+To specify field names consistently, we need to normalize them.
+If you follow one of normalization rules, you can modify $header
+consistently. This module normalizes field names as follows.
 
-In above way, plugin developers can't modify HTTP headers consistently.
-Blosxom misses the interface.
-This module provides you the alternative way, and also some convenient methods
-described below.
+Remember how Blosxom initializes $header:
+
+  $header = { -type => 'text/html' };
+
+A key '-type' is starting with a dash and lowercased, and so this module
+follows the same rules:
+
+  'Status'  # not normalized
+  'status'  # not normalized
+  '-status' # normalized
+
+How about 'Content-Length'? It contains a dash.
+To avoid quoting when specifying hash keys, this module transliterates dashes
+into underscores in field names:
+
+  'Content-Length'  # not normalized
+  '-content-length' # not normalized
+  '-content_length' # normalized
+
+If you follow the above normalization rule, you can modify $header directly.
+In other words, this module is compatible with the way modifying $header directly
+when you follow the above rule.
 
 =head2 METHODS
 

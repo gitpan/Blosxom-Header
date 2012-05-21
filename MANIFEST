@@ -20,4 +20,5 @@ t/01_normalize_field_name.t
 t/02_singleton.t
 t/10_tiehash.t
 t/11_methods.t
+t/derivatives.t
 xt/pod.t

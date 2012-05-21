@@ -1,5 +1,9 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.04002 May 21th, 2012
+  - _normalize_field_name() became a class method internal
+  - cookie() and p3p() receive LIST
+
 0.04001 May 10th, 2012
   - Removed Blosxom::Header::Class
   - Fixed compilation error

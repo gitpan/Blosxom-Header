@@ -27,9 +27,8 @@ no_index:
     - xt
 requires:
   Carp: 1.10
-  constant: 1.17
   perl: 5.8.9
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/anazawa/p5-Blosxom-Header
-version: 0.04001
+version: 0.04002
