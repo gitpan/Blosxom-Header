@@ -1,8 +1,6 @@
 use strict;
 use FindBin qw/$Bin/;
-use lib "$Bin/../lib";
 use Test::Base;
-use Blosxom::Header;
 
 plan tests => 3 + 2 * blocks;
 
@@ -40,7 +38,6 @@ run {
     # Initial configuration
     local $blosxom::output = $input->{output};
     local $blosxom::header = $input->{header};
-    local $Blosxom::Header::INSTANCE;
     local %ENV = %{ $input->{env} };
 
     $plugin->last;

@@ -1,34 +1,34 @@
 # Blosxom plugin : conditional_get
 # Purpose        : enables conditional GET
 # Author         : Ryo Anazawa <anazawa@cpan.org>
-# Version        : 0.01004 (2012/04/18)
+# Version        : 0.02000 (2012/05/25)
 # Documentation  : See the bottom of this file or type: perldoc conditional_get
 
 package conditional_get;
 use strict;
 use warnings;
-use Blosxom::Header;
 
-our $VERSION = '0.01004';
+our $VERSION = '0.02000';
 
 sub start { !$blosxom::static_entries }
 
 sub last {
-    return unless $ENV{REQUEST_METHOD} =~ /^(GET|HEAD)$/;
+    my ( $h, $env ) = ( $blosxom::header, \%ENV );
 
-    my $header = Blosxom::Header->instance;
+    my $method = $env->{REQUEST_METHOD};
+    return if $method ne 'GET' and $method ne 'HEAD';
 
-    if ( etag_matches( $header ) or not_modified_since( $header ) ) {
+    if ( etag_matches( $h, $env ) or not_modified_since( $h, $env ) ) {
 
-        $header->delete( qw/Content-Disposition attachment Content-Length/ );
+        my @fields = qw/-content_disposition -attachment -content_length/;
+        delete @{ $h }{ @fields };
+
+        $h->{-status} = '304 Not Modified';
 
         # If Content-Type isn't defined,
         # CGI::header() will add the default value.
         # And so makes it defined
-        $header->set(
-            Status       => '304 Not Modified',
-            Content_Type => q{},
-        );
+        $h->{-type} = q{};
 
         # Truncate output
         $blosxom::output = q{};
@@ -37,21 +37,22 @@ sub last {
     return;
 }
 
+# NOTE: Quoted comments were taken from Plack::Middleware::ConditionalGET
 # > RFC 2616 14.25 says it's OK and expected to use 'eq' :)
 # >> Note: When handling an If-Modified-Since header field, some
 # >> servers will use an exact date comparison function, rather than a
 # >> less-than function, for deciding whether to send a 304 ...
 
 sub etag_matches {
-    my $header = shift;
-    return unless $header->exists( 'ETag' );
-    $header->get( 'ETag' ) eq _value( $ENV{HTTP_IF_NONE_MATCH} );
+    my ( $h, $env ) = @_;
+    return if !$h->{-etag} or !$env->{HTTP_IF_NONE_MATCH};
+    $h->{-etag} eq _value( $env->{HTTP_IF_NONE_MATCH} );
 }
 
 sub not_modified_since {
-    my $header = shift;
-    return unless $header->exists( 'Last_Modified' );
-    $header->get( 'Last_Modified' ) eq _value( $ENV{HTTP_IF_MODIFIED_SINCE} );
+    my ( $h, $env ) = @_;
+    return if !$h->{-last_modified} or !$env->{HTTP_IF_MODIFIED_SINCE};
+    $h->{-last_modified} eq _value( $env->{HTTP_IF_MODIFIED_SINCE} );
 }
 
 # > IE sends wrong formatted value
@@ -72,9 +73,9 @@ Blosxom Plug-in: conditional_get
 
 =head1 VERSION
 
-0.01004 (2012/04/18)
+0.02000 (2012/05/25)
 
-=head1 SYNOPSIS
+=head1 DESCRIPTION
 
 Enables condtional GET and HEAD using C<If-None-Match> and
 C<If-Modified-Since> header.
@@ -84,18 +85,45 @@ or C<ETag> response headers according to RFC 2616.
 When either of the conditions is met, the response body is set
 to be zero length and the status is set to 304 Not Modified.
 
-NOTE: This plugin adds neither C<Last-Modified> nor
-C<ETag> response headers.
+This plugin is compatible with L<Blosxom::Header>.
 
-=head1 INSTALLATION
+=head2 INSTALLATION
+
+'cd' into a directory which contains 'conditional_get' and
+'conditional_get.t', and test the plugin:
+
+  $ prove conditional_get.t
 
 Drop the conditional_get plug-in into your Blosxom plugins folder.
+
+=head1 LIMITATIONS
+
+This plugin adds neither C<Last-Modified> nor
+C<ETag> response headers. You have to add either or both headers
+in your own way. For example,
+
+  package last_modified;
+  use strict;
+  use warnings;
+  use HTTP::Date;
+
+  my @mtime;
+
+  sub start { !$blosxom::static_entries }
+
+  sub date { push @mtime, $_[3] }
+
+  sub last {
+      return unless @mtime;
+      @mtime = sort { $b <=> $a } @mtime;
+      $blosxom::header->{-last_modified} = time2str( $mtime[0] );
+  }
+
+  1;
 
 =head1 DEPENDENCIES
 
 L<Blosxom 2.0.0|http://blosxom.sourceforge.org> or higher.
-
-L<Blosxom::Header>
 
 =head1 SEE ALSO
 

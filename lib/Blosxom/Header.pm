@@ -4,37 +4,44 @@ use strict;
 use warnings;
 use Carp qw/carp croak/;
 
-our $VERSION = '0.04002';
+our $VERSION = '0.04003';
 
 # Naming conventions
 #   $field : raw field name (e.g. Foo-Bar)
 #   $norm  : normalized field name (e.g. -foo_bar)
 
+use constant {
+    READONLY => 'Modification of a read-only value attempted',
+    USELESS  => 'Useless use of %s with no values',
+};
+
 our $INSTANCE;
 
 sub instance {
     my $class = shift;
-    return $INSTANCE if ref $INSTANCE eq __PACKAGE__;
-    tie my %header, "$class";
-    $INSTANCE = bless \%header, $class;
+    return $class if ref $class;
+    return $INSTANCE if defined $INSTANCE;
+    tie my %header => $class, 'rw';
+    $INSTANCE = bless \%header => $class;
 }
 
 sub get {
     my ( $self, $field ) = @_;
     my $value = $self->{ $field };
     return $value unless ref $value eq 'ARRAY';
-    return @{ $value } if wantarray;
-    $value->[0];
+    wantarray ? @{ $value } : $value->[0];
 }
 
 sub set {
     my ( $self, %fields ) = @_;
+    return _carp( USELESS, 'set()' ) unless %fields;
     @{ $self }{ keys %fields } = values %fields;
     return;
 }
 
 sub delete {
     my ( $self, @fields ) = @_;
+    return _carp( USELESS, 'delete()' ) unless @fields;
     delete @{ $self }{ @fields };
 }
 
@@ -47,10 +54,7 @@ sub push_p3p    { shift->_push( -p3p    => @_ ) }
 sub _push {
     my ( $self, $field, @values ) = @_;
 
-    unless ( @values ) {
-        carp( 'Useless use of _push() with no values' );
-        return;
-    }
+    return _carp( USELESS, '_push()' ) unless @values;
 
     if ( my $value = $self->{ $field } ) {
         return push @{ $value }, @values if ref $value eq 'ARRAY';
@@ -62,87 +66,111 @@ sub _push {
     scalar @values;
 }
 
+
 # Make accessors
 
-for my $method ( qw/attachment charset expires nph status target type/ ) {
-    my $field = "-$method";
+{
     no strict 'refs';
-    *$method = sub {
-        my $self = shift;
-        return $self->{ $field } = shift if @_;
-        $self->{ $field };
-    };
+
+    for my $method ( qw/attachment charset expires nph target type/ ) {
+        my $field = "-$method";
+        *$method = sub {
+            my $self = shift;
+            return $self->{ $field } = shift if @_;
+            $self->{ $field };
+        };
+    }
+
+    for my $method ( qw/cookie p3p/ ) {
+        my $field = "-$method";
+        *$method = sub {
+            my $self = shift;
+            return $self->{ $field } = [ @_ ] if @_ > 1;
+            return $self->{ $field } = shift if @_;
+            $self->{ $field };
+        };
+    }
 }
 
-for my $method ( qw/cookie p3p/ ) {
-    my $field = "-$method";
-    no strict 'refs';
-    *$method = sub {
-        my $self = shift;
-        return $self->{ $field } = [ @_ ] if @_ > 1;
-        return $self->{ $field } = shift if @_;
-        $self->{ $field };
-    };
+sub status {
+    my $self = shift;
+
+    if ( @_ ) {
+        require HTTP::Status;
+        my $code = shift;
+        my $message = HTTP::Status::status_message( $code );
+        $self->{-status} = "$code $message";
+        return $code;
+    }
+    elsif ( my $status = $self->{-status} ) {
+        return substr( $status, 0, 3 );
+    }
+
+    return;
 }
+
 
 # tie() interface
 
 sub TIEHASH {
     my $class = shift;
-
-    unless ( ref $blosxom::header eq 'HASH' ) {
-        croak( "\$blosxom::header hasn't been initialized yet" );
-    }
-
-    bless { header => $blosxom::header }, $class;
+    my $is = $_[0] && lc $_[0] eq 'rw' ? lc shift : 'ro';
+    my $default = shift || $blosxom::header;
+    croak( 'Not a HASH reference' ) unless ref $default eq 'HASH';
+    bless { is => $is, default => $default }, $class;
 }
 
 sub FETCH {
     my ( $self, $field ) = @_;
     my $norm = $self->_normalize_field_name( $field );
-    $self->{header}->{$norm};
+    $self->{default}->{$norm};
 }
 
 sub STORE {
     my ( $self, $field, $value ) = @_;
+    croak( READONLY ) unless $self->{is} =~ /w/;
     my $norm = $self->_normalize_field_name( $field );
-    $self->{header}->{$norm} = $value;
+    $self->{default}->{$norm} = $value;
     return;
 }
 
 sub DELETE {
     my ( $self, $field ) = @_;
+    croak( READONLY ) unless $self->{is} =~ /w/;
     my $norm = $self->_normalize_field_name( $field );
-    delete $self->{header}->{$norm};
+    delete $self->{default}->{$norm};
 }
 
 sub CLEAR {
     my $self = shift;
-    %{ $self->{header} } = ();
+    croak( READONLY ) unless $self->{is} =~ /w/;
+    %{ $self->{default} } = ();
 }
 
 sub EXISTS {
     my ( $self, $field ) = @_;
     my $norm = $self->_normalize_field_name( $field );
-    exists $self->{header}->{$norm};
+    exists $self->{default}->{$norm};
 }
 
 sub FIRSTKEY {
     my $self = shift;
-    keys %{ $self->{header} };
-    each %{ $self->{header} };
+    keys %{ $self->{default} };
+    each %{ $self->{default} };
 }
 
-sub NEXTKEY {
-    my $self = shift;
-    each %{ $self->{header} };
-}
+sub NEXTKEY { each %{ shift->{default} } }
+
+sub UNTIE { shift->{is} !~ /w/ && croak( READONLY ) }
+
+
+# Internal methods
 
 {
     my %ALIAS_OF = (
         -content_type => '-type',
-        -set_cookie   => '-cookie',
         -cookies      => '-cookie',
+        -set_cookie   => '-cookie',
     );
 
     sub _normalize_field_name {
@@ -152,11 +180,19 @@ sub NEXTKEY {
         # add an initial dash if not exists
         $norm = "-$norm" unless $norm =~ /^-/;
 
-        # use underscores instead of dashes 
+        # transliterate dashes into underscores in a field name
         substr( $norm, 1 ) =~ tr{-}{_};
 
         $ALIAS_OF{ $norm } || $norm;
     }
+}
+
+
+# Internal functions
+
+sub _carp {
+    my ( $format, @args ) = @_;
+    carp( sprintf $format, @args );
 }
 
 1;
@@ -291,11 +327,11 @@ This will remove all header fields.
 
 =back
 
-=head2 ATTRIBUTES
+=head2 CONVENIENCE METHODS
 
-These methods can both be used to get() and set() the value of an attribute.
-The attribute value is set if you pass an argument to the method.
-If the given attribute didn't exists then undef is returned.
+These methods can both be used to get() and set() the value of a header.
+The header value is set if you pass an argument to the method.
+If the given header didn't exists then undef is returned.
 
 =over 4
 
@@ -322,9 +358,9 @@ NOTE: If $header->type() contains 'charset', this attribute will be ignored.
 =item $header->cookie
 
 Represents the Set-Cookie headers.
-The parameter can be an arrayref or a string.
+The parameter can be an array or a string.
 
-  $header->cookie( [ 'foo', 'bar' ] );
+  $header->cookie( 'foo', 'bar' );
   $header->cookie( 'baz' );
 
 =item $header->expires
@@ -356,9 +392,9 @@ a NPH (no-parse-header) script:
 =item $header->p3p
 
 Will add a P3P tag to the outgoing header.
-The parameter can be an arrayref or a space-delimited string.
+The parameter can be an array or a space-delimited string.
 
-  $header->p3p( [ qw/CAO DSP LAW CURa/ ] );
+  $header->p3p( qw/CAO DSP LAW CURa/ );
   $header->p3p( 'CAO DSP LAW CURa' );
 
 In either case, the outgoing header will be formatted as:
@@ -367,9 +403,13 @@ In either case, the outgoing header will be formatted as:
 
 =item $header->status
 
-Represents the Status header.
+Represents HTTP status code.
 
-  $header->status( '304 Not Modified' );
+  $header->status(304);
+
+Don't pass a string which contains reason phrases:
+
+  $header->status( '304 Not Modified' ); # Obsolete
 
 =item $header->target
 
@@ -384,8 +424,9 @@ If not defined, defaults to 'text/html'.
 
   $header->type( 'text/plain' );
 
-NOTE: If you don't want to output the Content-Type header, 
-you have to set to an empty string:
+NOTE: If $header->type isn't defined, L<CGI>::header() will add the default
+value. If you don't want to output the Content-Type header itself, you have to
+set to an empty string:
 
   $header->type( q{} );
 
@@ -400,6 +441,12 @@ L<Blosxom 2.0.0|http://blosxom.sourceforge.net/> or higher.
 L<CGI>,
 L<Class::Singleton>,
 L<perltie>
+
+=head1 ACKNOWLEDGEMENT
+
+Blosxom was written by Rael Dornfest.
+L<The Blosxom Development Team|http://sourceforge.net/projects/blosxom/>
+succeeded the maintenance.
 
 =head1 AUTHOR
 

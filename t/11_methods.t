@@ -34,6 +34,8 @@ is_deeply $blosxom::header, {}, 'clear()';
 warning_is { $header->set( 'foo' ) }
     'Odd number of elements in hash assignment';
 
+warning_is { $header->set } 'Useless use of set() with no values';
+
 $header->set( -foo => 'bar' );
 is $blosxom::header->{-foo}, 'bar', 'set()';
 
@@ -52,6 +54,8 @@ $header->set( %fields );
 is_deeply $blosxom::header, \%fields, 'set() multiple elements';
 
 # delete()
+
+warning_is { $header->delete } 'Useless use of delete() with no values';
 
 my @deleted = $header->delete( qw/foo bar/ );
 is_deeply \@deleted, ['bar', 'baz'], 'delete() multiple elements';
@@ -100,5 +104,12 @@ $header->clear;
 my @p3p = qw(foo bar baz);
 $header->p3p( @p3p );
 is_deeply $blosxom::header->{-p3p}, \@p3p, 'p3p() receives LIST';
+
+# Status
+
+is $header->status, undef;
+is $header->status(304), '304';
+is $blosxom::header->{-status}, '304 Not Modified';
+is $header->status, '304';
 
 done_testing;

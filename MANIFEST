@@ -9,6 +9,7 @@ inc/Module/Install/Makefile.pm
 inc/Module/Install/Metadata.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
+lib/Blosxom/Header.Fast.pod
 lib/Blosxom/Header.ja.pod
 lib/Blosxom/Header.pm
 Makefile.PL
@@ -20,5 +21,5 @@ t/01_normalize_field_name.t
 t/02_singleton.t
 t/10_tiehash.t
 t/11_methods.t
-t/derivatives.t
+t/12_derivatives.t
 xt/pod.t
