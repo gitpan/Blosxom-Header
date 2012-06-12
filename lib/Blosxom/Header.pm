@@ -2,28 +2,49 @@ package Blosxom::Header;
 use 5.008_009;
 use strict;
 use warnings;
-use Carp qw/carp croak/;
+use constant USELESS => 'Useless use of %s with no values';
+use Blosxom::Header::Proxy;
+use Carp qw/carp/;
 
-our $VERSION = '0.04003';
+our $VERSION = '0.05001';
 
-# Naming conventions
-#   $field : raw field name (e.g. Foo-Bar)
-#   $norm  : normalized field name (e.g. -foo_bar)
 
-use constant {
-    READONLY => 'Modification of a read-only value attempted',
-    USELESS  => 'Useless use of %s with no values',
-};
+# Class methods
 
 our $INSTANCE;
 
 sub instance {
     my $class = shift;
+
     return $class if ref $class;
     return $INSTANCE if defined $INSTANCE;
-    tie my %header => $class, 'rw';
-    $INSTANCE = bless \%header => $class;
+
+    my %alias_of = (
+        -content_type => '-type',
+        -cookies      => '-cookie',
+        -set_cookie   => '-cookie',
+    );
+
+    my $callback = sub {
+        # lowercase a given string
+        my $norm  = lc shift;
+
+        # add an initial dash if not exist
+        $norm = "-$norm" unless $norm =~ /^-/;
+
+        # transliterate dashes into underscores in field names
+        substr( $norm, 1 ) =~ tr{-}{_};
+
+        $alias_of{ $norm } || $norm;
+    };
+
+    tie my %proxy => 'Blosxom::Header::Proxy', $callback;
+
+    $INSTANCE = bless \%proxy => $class;
 }
+
+
+# Instance methods
 
 sub get {
     my ( $self, $field ) = @_;
@@ -66,9 +87,6 @@ sub _push {
     scalar @values;
 }
 
-
-# Make accessors
-
 {
     no strict 'refs';
 
@@ -99,6 +117,7 @@ sub status {
         require HTTP::Status;
         my $code = shift;
         my $message = HTTP::Status::status_message( $code );
+        return carp( "Unknown status code: $code" ) unless $message;
         $self->{-status} = "$code $message";
         return $code;
     }
@@ -109,83 +128,7 @@ sub status {
     return;
 }
 
-
-# tie() interface
-
-sub TIEHASH {
-    my $class = shift;
-    my $is = $_[0] && lc $_[0] eq 'rw' ? lc shift : 'ro';
-    my $default = shift || $blosxom::header;
-    croak( 'Not a HASH reference' ) unless ref $default eq 'HASH';
-    bless { is => $is, default => $default }, $class;
-}
-
-sub FETCH {
-    my ( $self, $field ) = @_;
-    my $norm = $self->_normalize_field_name( $field );
-    $self->{default}->{$norm};
-}
-
-sub STORE {
-    my ( $self, $field, $value ) = @_;
-    croak( READONLY ) unless $self->{is} =~ /w/;
-    my $norm = $self->_normalize_field_name( $field );
-    $self->{default}->{$norm} = $value;
-    return;
-}
-
-sub DELETE {
-    my ( $self, $field ) = @_;
-    croak( READONLY ) unless $self->{is} =~ /w/;
-    my $norm = $self->_normalize_field_name( $field );
-    delete $self->{default}->{$norm};
-}
-
-sub CLEAR {
-    my $self = shift;
-    croak( READONLY ) unless $self->{is} =~ /w/;
-    %{ $self->{default} } = ();
-}
-
-sub EXISTS {
-    my ( $self, $field ) = @_;
-    my $norm = $self->_normalize_field_name( $field );
-    exists $self->{default}->{$norm};
-}
-
-sub FIRSTKEY {
-    my $self = shift;
-    keys %{ $self->{default} };
-    each %{ $self->{default} };
-}
-
-sub NEXTKEY { each %{ shift->{default} } }
-
-sub UNTIE { shift->{is} !~ /w/ && croak( READONLY ) }
-
-
-# Internal methods
-
-{
-    my %ALIAS_OF = (
-        -content_type => '-type',
-        -cookies      => '-cookie',
-        -set_cookie   => '-cookie',
-    );
-
-    sub _normalize_field_name {
-        my $self = shift;
-        my $norm = lc shift;
-
-        # add an initial dash if not exists
-        $norm = "-$norm" unless $norm =~ /^-/;
-
-        # transliterate dashes into underscores in a field name
-        substr( $norm, 1 ) =~ tr{-}{_};
-
-        $ALIAS_OF{ $norm } || $norm;
-    }
-}
+sub _tied { tied %{ $_[0] } }
 
 
 # Internal functions
@@ -438,9 +381,9 @@ L<Blosxom 2.0.0|http://blosxom.sourceforge.net/> or higher.
 
 =head1 SEE ALSO
 
+L<Blosxom::Header::Proxy>,
 L<CGI>,
-L<Class::Singleton>,
-L<perltie>
+L<Class::Singleton>
 
 =head1 ACKNOWLEDGEMENT
 

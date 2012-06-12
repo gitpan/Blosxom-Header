@@ -4,9 +4,16 @@ use Test::Base;
 
 plan tests => 1 * blocks;
 
+{
+    package blosxom;
+    our $header;
+}
+
+my $header = Blosxom::Header->instance;
+
 run {
     my $block = shift;
-    my $got = Blosxom::Header->_normalize_field_name( $block->input );
+    my $got = $header->_tied->( $block->input );
     is $got, $block->expected;
 };
 

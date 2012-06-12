@@ -4,7 +4,7 @@ use Test::More tests => 5;
 
 {
     package blosxom;
-    our $header = { -type => 'text/html' };
+    our $header = {};
 }
 
 ok !$Blosxom::Header::INSTANCE, 'no Blosxom::Header instance yet';
