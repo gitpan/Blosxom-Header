@@ -14,9 +14,14 @@ can_ok $header, qw(
     clear delete exists get set
     push_cookie push_p3p
     attachment charset cookie expires nph p3p status target type
+    is_initialized
 );
 
-isa_ok $header->_tied, 'Blosxom::Header::Proxy', '_tied()';
+subtest 'is_initialized()' => sub {
+    ok !$header->is_initialized, 'should return false';
+    local $blosxom::header = {};
+    ok $header->is_initialized, 'should return true';
+};
 
 subtest 'exists()' => sub {
     local $blosxom::header = { -foo => 'bar' };
@@ -27,7 +32,6 @@ subtest 'exists()' => sub {
 subtest 'get()' => sub {
     local $blosxom::header = { -foo => [ 'bar', 'baz' ] };
     is $header->get( 'Foo' ), 'bar', 'in scalar context';
-
     my @got = $header->get( 'Foo' );
     my @expected = qw( bar baz );
     is_deeply \@got, \@expected, 'in list context';
@@ -80,7 +84,6 @@ subtest 'delete()' => sub {
 
 subtest 'expires()' => sub {
     local $blosxom::header = {};
-
     is $header->expires, undef;
     is $header->expires( 'now' ), 'now', 'set expires()';
     is $header->expires, 'now', 'get expires()';
@@ -118,9 +121,12 @@ subtest 'cookie()' => sub {
 
 subtest 'status()' => sub {
     local $blosxom::header = {};
+
     is $header->status, undef;
     is $header->status( 304 ), '304';
     is $blosxom::header->{-status}, '304 Not Modified';
     is $header->status, '304';
-    warning_is { $header->status( 999 ) } 'Unknown status code: 999';
+
+    my $expected = 'Unknown status code "999" passed to status()';
+    warning_is { $header->status( 999 ) } $expected;
 };

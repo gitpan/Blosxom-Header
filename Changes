@@ -1,5 +1,9 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.05002 Jun 13, 2012
+  - Added is_initialized() to Blosxom::Header
+  - Added DIAGNOSTICS to POD
+
 0.05001 Jun 13th, 2012
   - Added Blosxom::Header::Proxy
   - Added _tied() method which returns Blosxom::Header::Proxy object

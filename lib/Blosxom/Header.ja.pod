@@ -28,8 +28,8 @@ Blosxom::Header::ja - 一意に HTTP ヘッダを指定する
 
 ブロッサムは単一の CGI スクリプトとして動作する、
 ウェブログ・アプリケーションの一つである。
-このアプリケーションは、$header というハッシュのリファレンスをグローバル化する。
-$header は CGI モジュールの header() 関数に渡され、HTTP ヘッダを生成する。
+このアプリケーションは、C<$header> というハッシュのリファレンスをグローバル化する。
+C<$header> は CGI モジュールの C<header()> 関数に渡され、HTTP ヘッダを生成する。
 
   package blosxom;
   use CGI;
@@ -37,10 +37,10 @@ $header は CGI モジュールの header() 関数に渡され、HTTP ヘッダ�
   # プラグインを読み込む
   print CGI::header( $header );
 
-header() は $header のキーについて、大文字と小文字を区別しない。
+C<header()> は C<$header> のキーについて、大文字と小文字を区別しない。
 また、キーの先頭にハイフンを付加するかどうかも任意だ。
 他方、ハッシュのキーは大文字と小文字を区別する。
-したがって、複数のプラグインが共存するような状況では、一意に $header
+したがって、複数のプラグインが共存するような状況では、一意に C<$header>
 を操作することができない。
 
 =head2 METHODS
@@ -52,6 +52,13 @@ header() は $header のキーについて、大文字と小文字を区別し�
 Blosxom::Header インスタンスを返す。インスタンスが存在しなければ、
 新たに作成する。
 
+=item $bool = $header->is_initialized
+
+C<$blosxom::header> が初期化されているとき、真を返す。
+初期化されていないとき、偽を返す。
+Blosxom は C<blosxom::generate()> を呼ぶ直前に、この変数を初期化する。
+C<$bool> が偽のとき、下記のメソッドは例外を投げる。
+
 =item $header->set( $field => $value )
 
 =item $header->set( $f1 => $v1, $f2 => $v2, ... )
@@ -61,7 +68,7 @@ $field で指定したフィールドに、$value を代入する。
 またハイフンの代わりに、アンダーバーを使うこともできる。
 
 $value は基本的に文字列をとる。
-特に、フィールド名として 'Set-Cookie' あるいは 'P3P'
+特に、フィールド名として C<Set-Cookie> あるいは C<P3P>
 を指定したとき、リストのリファレンスをとる。
 
   $header->set( Set_Cookie => [ $cookie1, $cookie2 ] );
@@ -72,7 +79,7 @@ $value は基本的に文字列をとる。
 =item @values = $header->get( $field )
 
 引数としてフィールド名をとり、文字列を返す。
-フィールドが存在しなければ undef を返す。
+フィールドが存在しなければ C<undef> を返す。
 また、リスト・コンテキストで、リストを返す。
 
   my @cookie = $header->get( 'Set-Cookie' );
@@ -94,11 +101,17 @@ Set-Cookie ヘッダを追加する。
 
 =item $header->push_p3p( @p3p )
 
+P3P タグを追加する。
+
+=item $header->clear
+
+すべてのフィールドを削除する。
+
 =back
 
-=head2 ACCESSORS
+=head2 CONVENIENCE METHODS
 
-以下のメソッドは、引数をつけたとき set()、つけないとき get() として働く。
+以下のメソッドは、引数をつけたとき C<set()>、つけないとき C<get()> として働く。
 
 =over 4
 
@@ -108,7 +121,7 @@ Set-Cookie ヘッダを追加する。
 
 =item $header->charset
 
-文字セットを指定する。$header->type に 'charset' が含まれている場合、
+文字セットを指定する。C<< $header->type >> に C<charset> が含まれている場合、
 この属性は無視される。
 
   $header->charset( 'utf-8' );
@@ -142,7 +155,7 @@ Set-Cookie ヘッダを追加する。
 
 =item $header->status
 
-  $header->status( '304 Not Modified' );
+  $header->status( '304' );
 
 =item $header->target
 
@@ -154,7 +167,7 @@ Set-Cookie ヘッダを追加する。
 
   $header->type( 'text/plain' );
 
-この属性が undef の場合、header() 関数がデフォルトの Content-Type ヘッダを
+この属性が C<undef> の場合、C<CGI::header()> がデフォルトの Content-Type ヘッダを
 出力する。Content-Type ヘッダを出力したくない場合、空の文字列を代入
 しなければならない。
 
@@ -168,7 +181,7 @@ L<Blosxom 2.0.0|http://blosxom.sourceforge.net/> or higher.
 
 =head1 SEE ALSO
 
-L<CGI>, L<Class::Singleton>, L<perltie>
+L<Blosxom::Header::Proxy>, L<CGI>, L<Class::Singleton>
 
 =head1 AUTHOR
 

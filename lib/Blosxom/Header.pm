@@ -5,8 +5,9 @@ use warnings;
 use constant USELESS => 'Useless use of %s with no values';
 use Blosxom::Header::Proxy;
 use Carp qw/carp/;
+use HTTP::Status qw/status_message/;
 
-our $VERSION = '0.05001';
+our $VERSION = '0.05002';
 
 
 # Class methods
@@ -45,6 +46,8 @@ sub instance {
 
 
 # Instance methods
+
+sub is_initialized { scalar %{ $_[0] } }
 
 sub get {
     my ( $self, $field ) = @_;
@@ -114,21 +117,24 @@ sub status {
     my $self = shift;
 
     if ( @_ ) {
-        require HTTP::Status;
         my $code = shift;
-        my $message = HTTP::Status::status_message( $code );
-        return carp( "Unknown status code: $code" ) unless $message;
-        $self->{-status} = "$code $message";
-        return $code;
+
+        if ( my $message = status_message( $code ) ) {
+            $self->{-status} = "$code $message";
+            return $code;
+        }
+
+        carp( qq{Unknown status code "$code" passed to status()} );
+
+        return;
     }
-    elsif ( my $status = $self->{-status} ) {
+
+    if ( my $status = $self->{-status} ) {
         return substr( $status, 0, 3 );
     }
 
     return;
 }
-
-sub _tied { tied %{ $_[0] } }
 
 
 # Internal functions
@@ -168,8 +174,8 @@ Blosxom::Header - Missing interface to modify HTTP headers
 
 =head1 DESCRIPTION
 
-Blosxom, an weblog application, globalizes $header which is a reference to
-a hash. This application passes $header to L<CGI>::header() to generate HTTP
+Blosxom, an weblog application, globalizes C<$header> which is a reference to
+a hash. This application passes C<$header> to C<CGI::header()> to generate HTTP
 headers.
 
   package blosxom;
@@ -178,28 +184,28 @@ headers.
   # Loads plugins
   print CGI::header( $header );
 
-header() doesn't care whether keys of $header are lowecased
+C<header()> doesn't care whether keys of C<$header> are lowercased
 nor starting with a dash, and also transliterates underscores into dashes
 in field names.
 
 =head2 HOW THIS MODULE NORMALIZES FIELD NAMES
 
 To specify field names consistently, we need to normalize them.
-If you follow one of normalization rules, you can modify $header
+If you follow one of normalization rules, you can modify C<$header>
 consistently. This module normalizes field names as follows.
 
-Remember how Blosxom initializes $header:
+Remember how Blosxom initializes C<$header>:
 
   $header = { -type => 'text/html' };
 
-A key '-type' is starting with a dash and lowercased, and so this module
+A key C<-type> is starting with a dash and lowercased, and so this module
 follows the same rules:
 
   'Status'  # not normalized
   'status'  # not normalized
   '-status' # normalized
 
-How about 'Content-Length'? It contains a dash.
+How about C<Content-Length>? It contains a dash.
 To avoid quoting when specifying hash keys, this module transliterates dashes
 into underscores in field names:
 
@@ -207,9 +213,9 @@ into underscores in field names:
   '-content-length' # not normalized
   '-content_length' # normalized
 
-If you follow the above normalization rule, you can modify $header directly.
-In other words, this module is compatible with the way modifying $header directly
-when you follow the above rule.
+If you follow the above normalization rule, you can modify C<$header> directly.
+In other words, this module is compatible with the way modifying C<$header>
+directly when you follow the above rule.
 
 =head2 METHODS
 
@@ -218,6 +224,16 @@ when you follow the above rule.
 =item $header = Blosxom::Header->instance
 
 Returns a current Blosxom::Header object instance or create a new one.
+
+=item $bool = $header->is_initialized
+
+Returns a Boolean value telling whether C<$blosxom::header> is initialized or
+not. Blosxom initializes the variable just before C<blosxom::generate()> is
+called. If C<$bool> was false, the following methods throw exceptions.
+
+Internally, this method is a shortcut for
+
+  $bool = ref $blosxom::header eq 'HASH';
 
 =item $header->set( $field => $value )
 
@@ -262,7 +278,7 @@ push_cookie().
 
 =item $header->push_p3p( @p3p )
 
-  $header->push_p3p( qw/foo bar/ );
+Adds P3P tags to the P3P header.
 
 =item $header->clear
 
@@ -272,9 +288,11 @@ This will remove all header fields.
 
 =head2 CONVENIENCE METHODS
 
-These methods can both be used to get() and set() the value of a header.
-The header value is set if you pass an argument to the method.
-If the given header didn't exists then undef is returned.
+The following methods were named after parameters recognized by
+C<CGI::header()>.
+They can both be used to read and to set the value of an attribute.
+The value is set if you pass an argument to the method.
+If the given attribute wasn't defined then C<undef> is returned.
 
 =over 4
 
@@ -292,19 +310,18 @@ In this case, the outgoing header will be formatted as:
 =item $header->charset
 
 Represents the character set sent to the browser.
-If not provided, defaults to ISO-8859-1.
+If not provided, defaults to C<ISO-8859-1>.
 
   $header->charset( 'utf-8' );
 
-NOTE: If $header->type() contains 'charset', this attribute will be ignored.
+NOTE: If C<< $header->type >> contains C<charset>, this attribute will be ignored.
 
 =item $header->cookie
 
 Represents the Set-Cookie headers.
-The parameter can be an array or a string.
+The parameter can be an array.
 
   $header->cookie( 'foo', 'bar' );
-  $header->cookie( 'baz' );
 
 =item $header->expires
 
@@ -334,7 +351,7 @@ a NPH (no-parse-header) script:
 
 =item $header->p3p
 
-Will add a P3P tag to the outgoing header.
+Represents the P3P header.
 The parameter can be an array or a space-delimited string.
 
   $header->p3p( qw/CAO DSP LAW CURa/ );
@@ -348,7 +365,7 @@ In either case, the outgoing header will be formatted as:
 
 Represents HTTP status code.
 
-  $header->status(304);
+  $header->status( 304 );
 
 Don't pass a string which contains reason phrases:
 
@@ -363,15 +380,37 @@ Represents the Window-Target header.
 =item $header->type
 
 The Content-Type header indicates the media type of the message content.
-If not defined, defaults to 'text/html'.
+If not defined, defaults to C<text/html>.
 
   $header->type( 'text/plain' );
 
-NOTE: If $header->type isn't defined, L<CGI>::header() will add the default
+NOTE: If this attribute isn't defined, C<CGI::header()> will add the default
 value. If you don't want to output the Content-Type header itself, you have to
 set to an empty string:
 
   $header->type( q{} );
+
+=back
+
+=head1 DIAGNOSTICS
+
+=over 4
+
+=item $blosxom::header hasn't been initialized yet
+
+You attempted to modify C<$blosxom::header>
+before the variable was initialized.
+See C<< $header->is_initialized >>.
+
+=item Useless use of %s with no values
+
+You used the C<push_cookie()> or C<push_p3p()> method with no argument
+apart from the array,
+like C<< $header->push_cookie() >> or C<< $header->push_p3p() >>.
+
+=item Unknown status code "%d%d%d" passed to status()
+
+The given status code is unknown to L<HTTP::Status>.
 
 =back
 
@@ -390,6 +429,12 @@ L<Class::Singleton>
 Blosxom was written by Rael Dornfest.
 L<The Blosxom Development Team|http://sourceforge.net/projects/blosxom/>
 succeeded the maintenance.
+
+=head1 BUGS AND LIMITATIONS
+
+There are no known bugs in this module.
+Please report problems to Ryo Anazawa (anazawa@cpan.org).
+Patches are welcome.
 
 =head1 AUTHOR
 

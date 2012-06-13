@@ -18,7 +18,7 @@ subtest 'basic' => sub {
 
     ok !%proxy, 'not initialized yet';
     my $expected = qr/^\$blosxom::header hasn't been initialized yet/;
-    throws_ok { $proxy->header } $expected, 'header() throws exception';
+    throws_ok { $proxy->header } $expected, 'header() throws an exception';
 
     local $blosxom::header = {};
     ok %proxy, 'already initialized';
@@ -31,7 +31,11 @@ subtest 'insensitive hash' => sub {
     my $callback = sub { lc shift };
     my $proxy = tie my %proxy => 'Blosxom::Header::Proxy', $callback;
 
+    ok exists $proxy{Foo}, 'EXISTS() should return true';
+    ok !exists $proxy{Bar}, 'EXISTS() should return false';
+
     is $proxy{Foo}, 'bar', 'FETCH()';
+    is $proxy{Bar}, undef, 'FETCH() undef';
 
     $proxy{Bar} = 'baz';
     is $proxy->header->{bar}, 'baz', 'STORE()';

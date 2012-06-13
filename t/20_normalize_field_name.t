@@ -4,16 +4,11 @@ use Test::Base;
 
 plan tests => 1 * blocks;
 
-{
-    package blosxom;
-    our $header;
-}
-
 my $header = Blosxom::Header->instance;
 
 run {
     my $block = shift;
-    my $got = $header->_tied->( $block->input );
+    my $got = tied( %{ $header } )->( $block->input );
     is $got, $block->expected;
 };
 
