@@ -7,6 +7,7 @@ repository 'https://github.com/anazawa/p5-Blosxom-Header';
 requires Carp     => '1.10';
 requires constant => '1.17';
 requires 'HTTP::Status';
+requires 'Exporter';
 
 test_requires 'Test::Base';
 test_requires 'Test::More' => '0.98';

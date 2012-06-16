@@ -13,17 +13,21 @@ subtest 'basic' => sub {
     isa_ok $proxy, 'Blosxom::Header::Proxy';
     can_ok $proxy, qw(
         FETCH STORE DELETE EXISTS CLEAR FIRSTKEY NEXTKEY SCALAR
-        header
     );
 
-    ok !%proxy, 'not initialized yet';
+    ok !%proxy, 'not defined';
+    ok !$proxy->is_initialized, 'not initialized yet';
     my $expected = qr/^\$blosxom::header hasn't been initialized yet/;
     throws_ok { $proxy->header } $expected, 'header() throws an exception';
 
     local $blosxom::header = {};
-    ok %proxy, 'already initialized';
+    ok !%proxy, 'not defined';
+    ok $proxy->is_initialized, 'already initialized';
     is $proxy->header, $blosxom::header,
         'header() returns the same reference as $blosxom::header';
+
+    $blosxom::header = { foo => 'bar' };
+    ok %proxy, 'defined';
 };
 
 subtest 'insensitive hash' => sub {

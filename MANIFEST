@@ -22,4 +22,5 @@ t/01_singleton.t
 t/10_proxy.t
 t/20_normalize_field_name.t
 t/21_instance.t
+t/22_export.t
 xt/pod.t

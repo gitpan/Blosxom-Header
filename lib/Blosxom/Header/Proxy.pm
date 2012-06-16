@@ -53,10 +53,12 @@ sub FIRSTKEY {
 
 sub NEXTKEY { each %{ shift->header } }
 
-sub SCALAR { ref $blosxom::header eq 'HASH' }
+sub SCALAR { is_initialized() and %{ $blosxom::header } }
+
+sub is_initialized { ref $blosxom::header eq 'HASH' }
 
 sub header {
-    return $blosxom::header if SCALAR();
+    return $blosxom::header if is_initialized();
     croak( q{$blosxom::header hasn't been initialized yet.} );
 }
 
@@ -82,12 +84,16 @@ Blosxom::Header::Proxy
   my $value = $proxy{Foo}; # same value as $blosxom::header->{foo}
 
   undef $blosxom::header;
-  my $bool = %proxy; # false
-  $proxy->header; # throws an exception
+  scalar %proxy;          # false
+  $proxy->is_initialized; # false
 
   $blosxom::header = {};
-  my $bool = %proxy; # true
-  my $hashref = $proxy->header; # same reference as $blosxom::header
+  scalar %proxy;          # false
+  $proxy->is_initialized; # true
+
+  $blosxom::header = { -type => 'text/html' };
+  scalar %proxy;          # true
+  $proxy->is_initialized; # true
 
 =head1 DESCRIPTION
 
@@ -102,12 +108,18 @@ $callback normalizes hash keys passed to %proxy (defaults to C<sub { shift }>).
 
 A shortcut for
 
+  $bool = ref $blosxom::header eq 'HASH' and %{ $blosxom::header };
+
+=item $bool = $proxy->is_initialized
+
+A shortcut for
+
   $bool = ref $blosxom::header eq 'HASH';
 
 =item $hashref = $proxy->header
 
-Returns the same reference as C<$blosxom::header>.
-If C<scalar %proxy> is false, throws an exception.
+Returns the same reference as $blosxom::header. If
+C<< $proxy->is_initialized >> is false, throws an exception.
 
 =back
 

@@ -1,6 +1,6 @@
 use strict;
 use Blosxom::Header;
-use Test::More tests => 12;
+use Test::More tests => 14;
 use Test::Warn;
 
 {
@@ -11,10 +11,9 @@ use Test::Warn;
 my $header = Blosxom::Header->instance;
 isa_ok $header, 'Blosxom::Header';
 can_ok $header, qw(
-    clear delete exists get set
+    is_initialized clear delete exists get set
     push_cookie push_p3p
     attachment charset cookie expires nph p3p status target type
-    is_initialized
 );
 
 subtest 'is_initialized()' => sub {
@@ -129,4 +128,76 @@ subtest 'status()' => sub {
 
     my $expected = 'Unknown status code "999" passed to status()';
     warning_is { $header->status( 999 ) } $expected;
+};
+
+subtest 'charset()' => sub {
+    local $blosxom::header = {};
+    is $header->charset, undef;
+    is $header->charset( 'utf-8' ), 'UTF-8';
+    is $blosxom::header->{-charset}, 'utf-8';
+    is $header->charset, 'UTF-8';
+
+    $blosxom::header = { -type => 'text/html; charset=euc-jp' };
+    is $header->charset, 'EUC-JP';
+    is $header->charset( 'utf-8' ), 'UTF-8';
+    is_deeply $blosxom::header, { -type => 'text/html; charset=utf-8' };
+
+    $blosxom::header = { -type => 'text/html; charset=iso-8859-1; Foo=1' };
+    is $header->charset, 'ISO-8859-1';
+    is $header->charset( 'utf-8' ), 'UTF-8';
+    my $expected = { -type => 'text/html; charset=utf-8; Foo=1' };
+    is_deeply $blosxom::header, $expected;
+
+    $blosxom::header = { -type => 'text/html; charset="iso-8859-1"; Foo=1' };
+    is $header->charset, 'ISO-8859-1';
+    is $header->charset( 'utf-8' ), 'UTF-8';
+    $expected = { -type => 'text/html; charset=utf-8; Foo=1' };
+    is_deeply $blosxom::header, $expected;
+
+    $blosxom::header = { -type => 'text/html' };
+    is $header->charset, undef;
+    is $header->charset( 'utf-8' ), 'UTF-8';
+    is_deeply $blosxom::header, {
+        -type    => 'text/html',
+        -charset => 'utf-8',
+    };
+    is $header->charset, 'UTF-8';
+
+    $blosxom::header = {
+        -type    => 'text/html; charset=EUC-JP',
+        -charset => 'utf-8',
+    };
+    warning_is { $header->charset }
+        'Both of "type" and "charset" attributes specify character sets';
+    is $header->charset( 'Shift_JIS' ), 'SHIFT_JIS';
+    is_deeply $blosxom::header, { -type => 'text/html; charset=Shift_JIS' };
+};
+
+subtest 'type()' => sub {
+    local $blosxom::header = {};
+    is $header->type, q{};
+    is $header->type( 'text/plain' ), 'text/plain';
+    is $blosxom::header->{-type}, 'text/plain';
+    is $header->type, 'text/plain';
+
+    $blosxom::header = { -type => 'text/plain; charset=EUC-JP' };
+    is $header->type, 'text/plain';
+    my @got = $header->type;
+    my @expected = ( 'text/plain', 'charset=EUC-JP' );
+    is_deeply \@got, \@expected;
+
+    $blosxom::header = { -type => 'text/plain; charset=EUC-JP; Foo=1' };
+    is $header->type, 'text/plain';
+    @got = $header->type;
+    @expected = ( 'text/plain', 'charset=EUC-JP; Foo=1' );
+    is_deeply \@got, \@expected;
+
+    $blosxom::header = { -charset => 'utf-8' };
+    is $header->type( 'text/plain; charset=EUC-JP' ), 'text/plain';
+    is_deeply $blosxom::header, { -type => 'text/plain; charset=EUC-JP' };
+
+    $blosxom::header = {};
+    is $header->type( '   TEXT  / HTML   ' ), 'text/html';
+    is_deeply $blosxom::header, { -type => '   TEXT  / HTML   ' };
+    is $header->type, 'text/html';
 };

@@ -1,5 +1,12 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.05003 Jun 16, 2012
+  - Exports header_get(), header_set(), header_exists(), header_delete()
+    on demand
+  - Exports the instance as $Header on demand
+  - charset() became consistent with type()
+  - Added has_instance()
+
 0.05002 Jun 13, 2012
   - Added is_initialized() to Blosxom::Header
   - Added DIAGNOSTICS to POD
