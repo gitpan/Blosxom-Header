@@ -1,5 +1,12 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.05004 Jun 21, 2012
+  - Added field_names()
+  - Exports header_push() on demand
+  - charset() became read-only
+  - p3p() and cookie() return LISTs
+  - Modified a difinition of CLEAR()
+
 0.05003 Jun 16, 2012
   - Exports header_get(), header_set(), header_exists(), header_delete()
     on demand

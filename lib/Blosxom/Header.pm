@@ -2,61 +2,45 @@ package Blosxom::Header;
 use 5.008_009;
 use strict;
 use warnings;
-use base 'Exporter';
+use base qw/Exporter/;
 use constant USELESS => 'Useless use of %s with no values';
 use Blosxom::Header::Proxy;
 use Carp qw/carp/;
 use HTTP::Status qw/status_message/;
 
-our $VERSION = '0.05003';
-our @EXPORT_OK = qw( $Header header_get header_set header_exists header_delete );
+our $VERSION = '0.05004';
 
-our ( $INSTANCE, $Header );
-*Header = \$INSTANCE;
+our @EXPORT_OK = qw(
+    $Header       header_get    header_set
+    header_exists header_delete header_push
+);
+
+our $Header;
 
 sub import {
     my ( $class, $export ) = @_;
-    my $exports_instance = $export && ( $export eq '$Header' );
-    $INSTANCE = $class->_new_instance if $exports_instance and !$INSTANCE;
+    $Header = $class->instance if $export and $export eq '$Header';
     $class->export_to_level( 1, @_ );
 }
 
 
 # Class methods
+{
+    my $instance;
 
-sub instance {
-    my $class = shift;
-    return $class if ref $class;
-    return $INSTANCE if defined $INSTANCE;
-    $INSTANCE = $class->_new_instance;
+    sub instance {
+        my $class = shift;
+        return $class if ref $class;
+        return $instance if defined $instance;
+        $instance = $class->_new_instance;
+    }
+
+    sub has_instance { $instance }
 }
-
-sub has_instance { $INSTANCE }
 
 sub _new_instance {
     my $class = shift;
-
-    my %alias_of = (
-        -content_type => '-type',
-        -cookies      => '-cookie',
-        -set_cookie   => '-cookie',
-    );
-
-    my $callback = sub {
-        # lowercase a given string
-        my $norm  = lc shift;
-
-        # add an initial dash if not exist
-        $norm = "-$norm" unless $norm =~ /^-/;
-
-        # transliterate dashes into underscores in field names
-        substr( $norm, 1 ) =~ tr{-}{_};
-
-        $alias_of{ $norm } || $norm;
-    };
-
-    tie my %proxy => 'Blosxom::Header::Proxy', $callback;
-
+    tie my %proxy => 'Blosxom::Header::Proxy';
     bless \%proxy => $class;
 }
 
@@ -68,10 +52,9 @@ sub is_initialized { shift->_proxy->is_initialized }
 sub _proxy { tied %{ $_[0] } }
 
 sub get {
-    my ( $self, $field ) = @_;
-    my $value = $self->{ $field };
-    return $value unless ref $value eq 'ARRAY';
-    wantarray ? @{ $value } : $value->[0];
+    my ( $self, @fields ) = @_;
+    return _carp( USELESS, 'get()' ) unless @fields;
+    @{ $self }{ @fields };
 }
 
 sub set {
@@ -87,8 +70,10 @@ sub delete {
     delete @{ $self }{ @fields };
 }
 
-sub clear  { %{ $_[0] } = ()         }
+sub field_names { keys %{ $_[0] } }
+
 sub exists { exists $_[0]->{ $_[1] } }
+sub clear  { %{ $_[0] } = ()         }
 
 sub push_cookie { shift->_push( -cookie => @_ ) }
 sub push_p3p    { shift->_push( -p3p    => @_ ) }
@@ -119,68 +104,68 @@ sub _push {
             $self->{ $field };
         };
     }
+}
 
-    for my $method ( qw/cookie p3p/ ) {
-        my $field = "-$method";
-        *$method = sub {
-            my $self = shift;
-            return $self->{ $field } = [ @_ ] if @_ > 1;
-            return $self->{ $field } = shift if @_;
-            $self->{ $field };
-        };
+sub cookie {
+    my $self = shift;
+
+    if ( @_ > 1 ) {
+        $self->{-cookie} = [ @_ ];
     }
+    elsif ( @_ ) {
+        $self->{-cookie} = shift;
+    }
+
+    if ( my $cookies = $self->{-cookie} ) {
+        return $cookies unless ref $cookies eq 'ARRAY';
+        return wantarray ? @{ $cookies } : $cookies->[0];
+    }
+
+    return;
+}
+
+sub p3p {
+    my $self = shift;
+
+    if ( @_ > 1 ) {
+        $self->{-p3p} = [ @_ ];
+    }
+    elsif ( @_ ) {
+        my @tags = split / /, shift;
+        $self->{-p3p} = @tags > 1 ? \@tags : $tags[0];
+    }
+
+    if ( my $tags = $self->{-p3p} ) {
+        my @tags = ref $tags eq 'ARRAY' ? @{ $tags } : ( $tags );
+        @tags = map { split / / } @tags;
+        return wantarray ? @tags : $tags[0];
+    }
+
+    return;
 }
 
 sub type {
-    my $self    = shift;
-    my $charset = $self->{-charset};
+    my $self = shift;
 
-    if ( @_ ) {
-        my $type = shift;
-        delete $self->{-charset} if $charset and $type =~ /\bcharset\b/;
-        $self->{-type} = $type;
+    $self->{Content_Type} = shift if @_;
+
+    if ( my $content_type = $self->{Content_Type} ) {
+        my ( $type, $rest ) = split /;\s*/, $content_type, 2;
+        return q{} unless defined $type;
+        $type =~ s/\s+//g;
+        $type = lc $type;
+        return wantarray ? ( $type, $rest ) : $type;
     }
 
-    if ( my $type = $self->{-type} ) {
-        my ( $media_type, $rest ) = split /;\s*/, $type, 2;
-        $media_type =~ s/\s+//g if $media_type;
-        $media_type = lc $media_type if $media_type;
-        return wantarray ? ( $media_type, $rest ) : $media_type;
-    }
-
-    q{};
+    return;
 }
 
 sub charset {
     my $self = shift;
-    my $type = $self->{-type};
 
-    if ( @_ ) {
-        my $charset = shift;
-
-        if ( $type and $type =~ s/charset=[^;]+/charset=$charset/ ) {
-            delete $self->{-charset}; # be consistent with type()
-            $self->{-type} = $type;
-        }
-        else {
-            $self->{-charset} = $charset;
-        }
-
-        return uc $charset;
-    }
-
-    my $charset = $self->{-charset};
-
-    if ( $charset and $type and $type =~ /\bcharset\b/ ) {
-        return carp(
-            'Both of "type" and "charset" attributes specify character sets'
-        );
-    }
-    elsif ( $type and $type =~ /charset="?([^;"]+)"?/ ) {
-        return uc $1;
-    }
-    elsif ( $charset ) {
-        return uc $charset;
+    if ( my $content_type = $self->{Content_Type} ) {
+        my ( $charset ) = ( $content_type =~ /charset="?([^;"]+)"?/ );
+        return uc $charset if $charset;
     }
 
     return;
@@ -216,6 +201,7 @@ sub header_get    { __PACKAGE__->instance->get( @_ )    }
 sub header_set    { __PACKAGE__->instance->set( @_ )    }
 sub header_exists { __PACKAGE__->instance->exists( @_ ) }
 sub header_delete { __PACKAGE__->instance->delete( @_ ) }
+sub header_push   { __PACKAGE__->instance->_push( @_ )  }
 
 
 # Internal functions
@@ -255,14 +241,17 @@ Blosxom::Header - Missing interface to modify HTTP headers
   my @deleted = $Header->delete( qw/Content-Disposition Content-Length/ );
 
   $Header->push_cookie( @cookies );
-  $Header->push_p3p( @p3p );
+  $Header->push_p3p( @tags );
 
   $Header->clear;
 
 
   # Procedural interface
 
-  use Blosxom::Header qw/header_get header_set header_exists header_delete/;
+  use Blosxom::Header qw(
+      header_get    header_set  header_exists
+      header_delete header_push
+  );
 
   header_set(
       Status        => '304 Not Modified',
@@ -272,6 +261,9 @@ Blosxom::Header - Missing interface to modify HTTP headers
   my $status = header_get( 'Status' );
   my $bool = header_exists( 'ETag' );
   my @deleted = header_delete( qw/Content-Disposition Content-Length/ );
+
+  header_push( Set_Cookie => @cookies );
+  header_push( P3P => @tags );
 
 =head1 DESCRIPTION
 
@@ -342,21 +334,31 @@ The following functions are exported on demand.
 
 =over 4
 
-=item header_get()
+=item @values = header_get( @fields )
 
 A synonym for C<< Blosxom::Header->instance->get() >>.
 
-=item header_set()
+=item header_set( $field => $value )
+
+=item header_set( $f1 => $v2, $f2 => $v2, ... )
 
 A synonym for C<< Blosxom::Header->instance->set() >>.
 
-=item header_exists()
+=item $bool = header_exists( $field )
 
 A synonym for C<< Blosxom::Header->instance->exists() >>.
 
-=item header_delete()
+=item @deleted = header_delete( @fields )
 
 A synonym for C<< Blosxom::Header->instance->delete() >>.
+
+=item header_push( Set_Cookie => @cookies )
+
+A synonym for C<< Blosxom::Header->instance->push_cookie( @cookies ) >>.
+
+=item header_push( P3P => @tags )
+
+A synonym for C<< Blosxom::Header->instance->push_p3p( @tags ) >>.
 
 =back
 
@@ -401,18 +403,26 @@ The $value argument must be a plain string, except for when the Set-Cookie
 or P3P header is specified.
 In exceptional cases, $value may be a reference to an array.
 
-  $header->set( Set_Cookie => [ $cookie1, $cookie2 ] );
-  $header->set( P3P => [ qw/CAO DSP LAW CURa/ ] );
+  $header->set(
+      Set_Cookie => [ $cookie1, $cookie2 ],
+      P3P        => [ qw/CAO DSP LAW CURa/ ],
+  );
 
 =item $value = $header->get( $field )
 
-=item @values = $header->get( $field )
+=item @values = $header->get( @fields )
 
-Returns a value of the specified HTTP header.
-In list context, a list of scalars is returned.
+Returns the value of one or more header fields.
 
-  my @cookie = $header->get( 'Set-Cookie' );
-  my @p3p    = $header->get( 'P3P' );
+The following forms are obsolete. Use cookie() or p3p() instead.
+
+  my @cookies = $header->get( 'Set-Cookie' );
+  my @tags    = $header->get( 'P3P' );
+
+  # become
+
+  my @cookies = $header->cookie;
+  my @tags    = $header->p3p;
 
 =item $bool = $header->exists( $field )
 
@@ -429,13 +439,30 @@ Pushes the Set-Cookie headers onto HTTP headers.
 Returns the number of the elements following the completed
 push_cookie().  
 
+  my @cookies = $header->get( 'Set-Cookie' ); # ( 'foo', 'bar' )
+  $header->push_cookie( 'baz' );
+  @cookies = $header->get( 'Set-Cookie' ); # ( 'foo', 'bar', 'baz' )
+
 =item $header->push_p3p( @p3p )
 
 Adds P3P tags to the P3P header.
 
+  my @tags = $header->get( 'P3P' ); # ( 'CAO', 'DSP' )
+  $header->push_p3p( 'LAW', 'CURa' );
+  @tags = $header->get( 'P3P'); # ( 'CAO', 'DSP', 'LAW', 'CURa' )
+
 =item $header->clear
 
 This will remove all header fields.
+
+Internally, this method is a shortcut for
+
+  $blosxom::header = { -type => q{} };
+
+=item @fields = $header->field_names
+
+Returns the list of distinct names for the fields present in the header.
+In scalar context return the number of distinct field names.
 
 =back
 
@@ -454,18 +481,18 @@ If the given attribute wasn't defined then C<undef> is returned.
 Can be used to turn the page into an attachment.
 Represents suggested name for the saved file.
 
-  $header->attachment( 'foo.png' );
+  $header->attachment( 'genome.jpg' );
+  my $attachment = $header->attachment; # genome.jpg
 
-In this case, the outgoing header will be formatted as:
-
-  Content-Disposition: attachment; filename="foo.png"
+  my $cd = $header->get( 'Content-Disposition' );
+  # => 'attachment; filename="genome.jpg"'
 
 =item $header->charset
 
 Returns the upper-cased character set specified in the Content-Type header.
 If not provided, defaults to C<ISO-8859-1>.
 
-  $header->charset( 'utf-8' );
+  $charset = $header->charset; # UTF-8 (Readonly)
 
 =item $header->cookie
 
@@ -473,6 +500,7 @@ Represents the Set-Cookie headers.
 The parameter can be an array.
 
   $header->cookie( 'foo', 'bar' );
+  my @cookies = $header->cookie; # ( 'foo', 'bar' )
 
 =item $header->expires
 
@@ -508,6 +536,8 @@ The parameter can be an array or a space-delimited string.
   $header->p3p( qw/CAO DSP LAW CURa/ );
   $header->p3p( 'CAO DSP LAW CURa' );
 
+  my @tags = $header->p3p; # ( 'CAO', 'DSP', 'LAW', 'CURa' )
+
 In either case, the outgoing header will be formatted as:
 
   P3P: policyref="/w3c/p3p.xml" CP="CAO DSP LAW CURa"
@@ -517,38 +547,43 @@ In either case, the outgoing header will be formatted as:
 Represents HTTP status code.
 
   $header->status( 304 );
+  my $code = $header->status; # 304
 
-Don't pass a string which contains reason phrases:
-
-  $header->status( '304 Not Modified' ); # Obsolete
+  my $status = $header->get( 'Status' ); # 304 Not Modified
+  $header->set( Status => '304 Not Modified' );
 
 =item $header->target
 
 Represents the Window-Target header.
 
   $header->target( 'ResultsWindow' );
+  my $target = $header->target; # ResultsWindow
+
+  $header->set( Window_Target => 'ResultsWindow' );
+  $target = $header->get( 'Window-Target' ); # ResultsWindow
 
 =item $header->type
 
 The Content-Type header indicates the media type of the message content.
-If not defined, defaults to C<text/html>.
 
-  $header->type( 'text/plain' );
+  $header->type( 'text/plain; charset=utf-8' );
+
+  $header->set( Content_Type => 'text/plain; charset=utf-8' );
 
 The value returned will be converted to lower case, and potential parameters
 will be chopped off and returned as a separate value if in an array context.
+
+  my $type = $header->type; # 'text/html'
+  my @ct   = $heder->type;  # ( 'text/html', 'charset=ISO-8859-1' )
+
+  my $ct = $header->get( 'Content-Type' ); # 'text/html; charset=ISO-8859-1'
+
 If there is no such header field, then the empty string is returned.
 This makes it safe to do the following:
 
   if ( $header->type eq 'text/html' ) {
       ...
   }
-
-NOTE: If this attribute isn't defined, C<CGI::header()> will add the default
-value. If you don't want to output the Content-Type header itself, you have to
-set to an empty string:
-
-  $header->type( q{} );
 
 =back
 

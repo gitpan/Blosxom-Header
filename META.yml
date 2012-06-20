@@ -22,7 +22,6 @@ module_name: Blosxom::Header
 name: Blosxom-Header
 no_index:
   directory:
-    - examples
     - inc
     - t
     - xt
@@ -35,4 +34,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/anazawa/p5-Blosxom-Header
-version: 0.05003
+version: 0.05004

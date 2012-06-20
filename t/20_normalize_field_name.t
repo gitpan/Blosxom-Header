@@ -1,78 +1,119 @@
 use strict;
-use Blosxom::Header;
+use Blosxom::Header::Proxy;
 use Test::Base;
 
-plan tests => 1 * blocks;
+plan tests => 2 * blocks;
 
-my $header = Blosxom::Header->instance;
+my $proxy = tie my %proxy => 'Blosxom::Header::Proxy';
 
 run {
     my $block = shift;
-    my $got = $header->_proxy->( $block->input );
-    is $got, $block->expected;
+    is $proxy->norm_of( $block->input ),      $block->norm;
+    is $proxy->field_name_of( $block->norm ), $block->field_name;
 };
 
 __DATA__
 ===
---- input:    -foo
---- expected: -foo
+--- input:      -foo
+--- norm:       -foo
+--- field_name: Foo
 ===
---- input:    -Foo
---- expected: -foo
+--- input:      -Foo
+--- norm:       -foo
+--- field_name: Foo
 ===
---- input:    foo
---- expected: -foo
+--- input:      foo
+--- norm:       -foo
+--- field_name: Foo
 ===
---- input:    Foo
---- expected: -foo
+--- input:      Foo
+--- norm:       -foo
+--- field_name: Foo
 ===
---- input:    -foo-bar
---- expected: -foo_bar
+--- input:      -foo-bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    -Foo-bar
---- expected: -foo_bar
+--- input:      -Foo-bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    -Foo-Bar
---- expected: -foo_bar
+--- input:      -Foo-Bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    -foo_bar
---- expected: -foo_bar
+--- input:      -foo_bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    -Foo_bar
---- expected: -foo_bar
+--- input:      -Foo_bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    -Foo_Bar
---- expected: -foo_bar
+--- input:      -Foo_Bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    foo-bar
---- expected: -foo_bar
+--- input:      foo-bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    Foo-bar
---- expected: -foo_bar
+--- input:      Foo-bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    Foo-Bar
---- expected: -foo_bar
+--- input:      Foo-Bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    foo_bar
---- expected: -foo_bar
+--- input:      foo_bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    Foo_bar
---- expected: -foo_bar
+--- input:      Foo_bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
---- input:    Foo_Bar
---- expected: -foo_bar
+--- input:       Foo_Bar
+--- norm:       -foo_bar
+--- field_name: Foo-bar
 ===
+--- SKIP
 --- input:    -type
 --- expected: -type
 === 
+--- SKIP
 --- input:    -content_type
 --- expected: -type
 ===
---- input:    -cookie
---- expected: -cookie
+--- input:      -cookie
+--- norm:       -cookie
+--- field_name: Set-Cookie
 ===
---- input:    -cookies
---- expected: -cookie
+--- input:      -cookies
+--- norm:       -cookie
+--- field_name: Set-Cookie
 ===
---- input:    -set_cookie
---- expected: -cookie
+--- input:      -set_cookie
+--- norm:       -cookie
+--- field_name: Set-Cookie
+===
+--- input:      -window_target
+--- norm:       -target
+--- field_name: Window-Target
+===
+--- input:      -target
+--- norm:       -target
+--- field_name: Window-Target
+===
+--- input:      -attachment
+--- norm:       -attachment
+--- field_name: Content-Disposition
+===
+--- input:      -content_disposition
+--- norm:       -content_disposition
+--- field_name: Content-disposition
+===
+--- input:      -p3p
+--- norm:       -p3p
+--- field_name: P3P
