@@ -1,5 +1,9 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.05005 Jun 30, 2012
+  - Exports push_cookie() and push_p3p() instead of header_push().
+    header_push() will be removed in 0.06
+
 0.05004 Jun 21, 2012
   - Added field_names()
   - Exports header_push() on demand

@@ -1,0 +1,10 @@
+package foo;
+use strict;
+use warnings;
+use Blosxom::Header qw/header_set/;
+
+sub start { !$blosxom::static_entries }
+
+sub last { header_set( Foo => 'bar' ) }
+
+1;

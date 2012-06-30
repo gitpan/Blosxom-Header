@@ -1,6 +1,6 @@
 use strict;
 use Blosxom::Header;
-use Test::More tests => 6;
+use Test::More tests => 5;
 
 ok( !Blosxom::Header->has_instance, 'no Blosxom::Header instance yet' );
 
@@ -12,5 +12,3 @@ ok( $h2, 'created Blosxom::Header instance 2' );
 
 is( $h1, $h2, 'both instances are the same object' );
 is( Blosxom::Header->has_instance, $h1, 'Blosxom::Header has instance' );
-
-is( $h1->instance, $h1 );

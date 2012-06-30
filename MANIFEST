@@ -17,8 +17,12 @@ META.yml
 README
 t/00_compile.t
 t/01_singleton.t
-t/10_proxy.t
-t/20_normalize_field_name.t
+t/10_normalization.t
+t/11_proxy.t
 t/21_instance.t
 t/22_export.t
+t/30_plugins.t
+t/plugins/bar
+t/plugins/baz
+t/plugins/foo
 xt/pod.t

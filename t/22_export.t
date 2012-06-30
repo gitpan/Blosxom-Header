@@ -1,30 +1,25 @@
 use strict;
-use Test::More tests => 7;
+use Test::More tests => 6;
 
 BEGIN {
     my @methods = qw(
         header_get    header_set  header_exists
-        header_delete header_push
+        header_delete push_cookie push_p3p
     );
     use_ok 'Blosxom::Header', ( '$Header', @methods );
     can_ok __PACKAGE__, @methods;
 }
 
-ok( Blosxom::Header->has_instance );
 ok( $Header );
-is $Header, Blosxom::Header->has_instance;
-
-my $h = Blosxom::Header->instance;
-is $h, $Header;
+ok( Blosxom::Header->has_instance );
+is $Header, Blosxom::Header->instance;
 
 {
     package blosxom;
-    our $header;
+    our $header = {};
 }
 
 subtest 'functions' => sub {
-    $blosxom::header = {};
-
     is header_get( 'Content-Type' ), 'text/html; charset=ISO-8859-1';
     is header_get( 'Status' ), undef;
 
@@ -37,12 +32,12 @@ subtest 'functions' => sub {
     is header_delete( 'Status' ), '304 Not Modified';
     is_deeply $blosxom::header, {};
 
-    is header_push( P3P => 'CAO' ), 1;
+    is push_p3p( 'CAO' ), 1;
     is_deeply $blosxom::header, { -p3p => 'CAO' };
 
-    is header_push( P3P => 'DSP' ), 2;
+    is push_p3p( 'DSP' ), 2;
     is_deeply $blosxom::header, { -p3p => [qw/CAO DSP/] };
 
-    is header_push( P3P => 'LAW' ), 3;
+    is push_p3p( 'LAW' ), 3;
     is_deeply $blosxom::header, { -p3p => [qw/CAO DSP LAW/] };
 };
