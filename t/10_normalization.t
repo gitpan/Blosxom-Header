@@ -1,50 +1,23 @@
 use strict;
-use Blosxom::Header::Proxy;
+use Blosxom::Header::Adapter;
 use Test::Base;
 
-plan tests => blocks() + 2;
+plan tests => 1 * blocks();
 
-my $proxy = Blosxom::Header::Proxy->TIEHASH;
+my $adapter = Blosxom::Header::Adapter->TIEHASH;
 
 run {
     my $block = shift;
-    is $proxy->normalize( $block->input ), $block->expected;
+    is $adapter->normalize( $block->input ), $block->expected;
 };
 
-ok $proxy->is_normalized( '-foo_bar' );
-ok !$proxy->is_normalized( 'Foo-Bar' );
-
 __DATA__
-===
---- input:    -foo
---- expected: -foo
-===
---- input:    -Foo
---- expected: -foo
 ===
 --- input:    foo
 --- expected: -foo
 ===
 --- input:    Foo
 --- expected: -foo
-===
---- input:    -foo-bar
---- expected: -foo_bar
-===
---- input:    -Foo-bar
---- expected: -foo_bar
-===
---- input:    -Foo-Bar
---- expected: -foo_bar
-===
---- input:    -foo_bar
---- expected: -foo_bar
-===
---- input:    -Foo_bar
---- expected: -foo_bar
-===
---- input:    -Foo_Bar
---- expected: -foo_bar
 ===
 --- input:    foo-bar
 --- expected: -foo_bar
@@ -64,36 +37,29 @@ __DATA__
 --- input:    Foo_Bar
 --- expected: -foo_bar
 ===
---- input:    -cookie
---- expected:
-===
---- SKIP
---- input:    -cookies
---- expected:
-===
---- input:    -set_cookie
+--- input:    Set-Cookie
 --- expected: -cookie
 ===
---- input:    -window_target
+--- input:    Window-Target
 --- expected: -target
 ===
---- input:    -target
---- expected:
-===
---- input:    -attachment
---- expected: 
-===
---- input:    -content_disposition
---- expected: -content_disposition
-===
---- input:    -p3p
+--- input:    P3P
 --- expected: -p3p
 ===
---- input:    -charset
+--- input:    cookie
+--- expected:
+===
+--- input:    target
+--- expected:
+===
+--- input:    attachment
 --- expected: 
 ===
---- input:    -nph
+--- input:    charset
 --- expected: 
 ===
---- input:    -type
+--- input:    nph
+--- expected: 
+===
+--- input:    type
 --- expected: 

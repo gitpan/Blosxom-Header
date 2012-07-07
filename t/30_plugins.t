@@ -1,6 +1,6 @@
 use strict;
 use FindBin;
-use Test::More tests => 3 * 2 + 1;
+use Test::More tests => 2 * 2 + 1;
 
 {
     package blosxom;
@@ -9,7 +9,7 @@ use Test::More tests => 3 * 2 + 1;
     our $plugin_dir = "$FindBin::Bin/plugins";
 }
 
-my @plugins = qw( foo bar baz );
+my @plugins = qw( foo bar );
 
 for my $plugin ( @plugins ) {
     require_ok "$blosxom::plugin_dir/$plugin";
@@ -23,7 +23,6 @@ for my $plugin ( @plugins ) {
 my %expected = (
     -foo => 'bar',
     -bar => 'baz',
-    -baz => 'qux',
 );
 
 is_deeply $blosxom::header, \%expected;

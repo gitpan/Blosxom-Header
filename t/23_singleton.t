@@ -2,6 +2,11 @@ use strict;
 use Blosxom::Header;
 use Test::More tests => 5;
 
+{
+    package blosxom;
+    our $header = {};
+}
+
 ok( !Blosxom::Header->has_instance, 'no Blosxom::Header instance yet' );
 
 my $h1 = Blosxom::Header->instance;

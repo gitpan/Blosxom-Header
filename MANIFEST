@@ -10,19 +10,22 @@ inc/Module/Install/WriteAll.pm
 lib/Blosxom/Header.Fast.pod
 lib/Blosxom/Header.ja.pod
 lib/Blosxom/Header.pm
-lib/Blosxom/Header/Proxy.pm
+lib/Blosxom/Header/Adapter.pm
 Makefile.PL
 MANIFEST			This list of files
 META.yml
 README
 t/00_compile.t
-t/01_singleton.t
 t/10_normalization.t
-t/11_proxy.t
+t/11_adapter.t
+t/12_content_type.t
+t/13_content_disposition.t
+t/14_denormalization.t
+t/15_iterator.t
 t/21_instance.t
-t/22_export.t
+t/22_functions.t
+t/23_singleton.t
 t/30_plugins.t
 t/plugins/bar
-t/plugins/baz
 t/plugins/foo
 xt/pod.t

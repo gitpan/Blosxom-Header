@@ -1,200 +1,204 @@
 use strict;
 use Blosxom::Header;
-use Test::More tests => 19;
+use Test::More tests => 20;
 use Test::Warn;
+use Test::Exception;
+
 
 {
     package blosxom;
     our $header;
 }
 
+{
+    my $expected = qr{^\$blosxom::header hasn't been initialized yet};
+    throws_ok { Blosxom::Header->instance } $expected;
+}
+
+# Initialize
+my %header;
+$blosxom::header = \%header;
+
 my $header = Blosxom::Header->instance;
 isa_ok $header, 'Blosxom::Header';
 can_ok $header, qw(
-    is_initialized clear delete exists field_names get set
-    push_cookie push_p3p
+    clear delete exists field_names get set push_cookie push_p3p
     attachment charset cookie expires nph p3p status target type
 );
 
-our $Header;
-*Header = \$blosxom::header;
-
-subtest 'is_initialized()' => sub {
-    undef $Header;
-    ok !$header->is_initialized, 'should return false';
-
-    $Header = {};
-    ok $header->is_initialized, 'should return true';
-};
-
 subtest 'exists()' => sub {
-    $Header = { -foo => 'bar' };
+    %header = ( -foo => 'bar' );
     ok $header->exists( 'Foo' ), 'should return true';
     ok !$header->exists( 'Bar' ), 'should return false';
 };
 
 subtest 'get()' => sub {
-    $Header = { -foo => 'bar', -bar => 'baz' };
+    %header = ( -foo => 'bar', -bar => 'baz' );
     my @got = $header->get( 'Foo', 'Bar' );
     my @expected = qw( bar baz );
     is_deeply \@got, \@expected;
 };
 
 subtest 'clear()' => sub {
-    $Header = { -foo => 'bar' };
+    %header = ( -foo => 'bar' );
     $header->clear;
-    is_deeply $Header, { -type => q{} }, 'should be empty';
+    is_deeply \%header, { -type => q{} }, 'should be empty';
 };
 
 subtest 'set()' => sub {
-    $Header = {};
+    %header = ();
 
     warning_is { $header->set( 'Foo' ) }
         'Odd number of elements in hash assignment';
 
     warning_is { $header->set } 'Useless use of set() with no values';
 
-    $header->set( Foo => 'baz' );
-    is $Header->{-foo}, 'baz', 'set(), not case-sesitive';
-
     $header->set(
+        Foo => 'bar',
         Bar => 'baz',
         Baz => 'qux',
     );
 
     my %expected = (
-        -foo => 'baz',
+        -foo => 'bar',
         -bar => 'baz',
         -baz => 'qux',
     );
 
-    is_deeply $Header, \%expected, 'set() multiple elements';
+    is_deeply \%header, \%expected, 'set() multiple elements';
 };
 
 subtest 'delete()' => sub {
-    $Header = {
+    %header = (
         -foo => 'bar',
         -bar => 'baz',
         -baz => 'qux',
-    };
+    );
 
     warning_is { $header->delete } 'Useless use of delete() with no values';
 
     my @deleted = $header->delete( qw/foo bar/ );
     is_deeply \@deleted, [ 'bar', 'baz' ], 'delete() multiple elements';
-    is_deeply $Header, { -baz => 'qux' };
+    is_deeply \%header, { -baz => 'qux' };
 };
 
 subtest 'expires()' => sub {
-    $Header = {};
+    %header = ();
     is $header->expires, undef;
-    $header->expires( 'now' );
-    is $header->expires, 'now', 'get expires()';
-    is $Header->{-expires}, 'now';
+
+    my $now = 1341637509;
+    $header->expires( $now );
+    is $header->expires, $now, 'get expires()';
+    is $header{-expires}, $now;
+
+    $now++;
+    $header->expires( 'Sat, 07 Jul 2012 05:05:10 GMT' );
+    is $header->expires, $now, 'get expires()';
+    is $header{-expires}, 'Sat, 07 Jul 2012 05:05:10 GMT';
 };
 
 subtest 'push_cookie()' => sub {
-    $Header = {};
+    %header = ();
 
     my $expected = 'Useless use of _push() with no values';
     warning_is { $header->push_cookie } $expected;
 
     is $header->push_cookie( 'foo' ), 1, '_push()';
-    is $Header->{-cookie}, 'foo';
+    is $header{-cookie}, 'foo';
 
     is $header->push_cookie( 'bar' ), 2, '_push()';
-    is_deeply $Header->{-cookie}, [ 'foo', 'bar' ];
+    is_deeply $header{-cookie}, [ 'foo', 'bar' ];
 
     is $header->push_cookie( 'baz' ), 3, '_push()';
-    is_deeply $Header->{-cookie}, [ 'foo', 'bar', 'baz' ];
+    is_deeply $header{-cookie}, [ 'foo', 'bar', 'baz' ];
 };
 
 subtest 'status()' => sub {
-    $Header = {};
+    %header = ();
     is $header->status, undef;
     $header->status( 304 );
-    is $Header->{-status}, '304 Not Modified';
+    is $header{-status}, '304 Not Modified';
     is $header->status, '304';
     my $expected = 'Unknown status code "999" passed to status()';
     warning_is { $header->status( 999 ) } $expected;
 };
 
 subtest 'charset()' => sub {
-    $Header = {};
+    %header = ();
     is $header->charset, 'ISO-8859-1';
 
-    $Header = { -charset => q{} };
+    %header = ( -charset => q{} );
     is $header->charset, undef;
 
-    $Header = { -charset => 'utf-8' };
+    %header = ( -charset => 'utf-8' );
     is $header->charset, 'UTF-8';
 
-    $Header = { -type => q{}, -charset => 'utf-8' };
+    %header = ( -type => q{}, -charset => 'utf-8' );
     is $header->charset, undef;
 
-    $Header = { -type => 'text/html; charset=euc-jp' };
+    %header = ( -type => 'text/html; charset=euc-jp' );
     is $header->charset, 'EUC-JP';
 
-    $Header = { -type => 'text/html; charset=euc-jp', -charset => q{}  };
+    %header = ( -type => 'text/html; charset=euc-jp', -charset => q{} );
     is $header->charset, 'EUC-JP';
 
-    $Header = { -type => 'text/html; charset=iso-8859-1; Foo=1' };
+    %header = ( -type => 'text/html; charset=iso-8859-1; Foo=1' );
     is $header->charset, 'ISO-8859-1';
 
-    $Header = {
+    %header = (
         -type    => 'text/html; charset=euc-jp',
         -charset => 'utf-8',
-    };
+    );
     is $header->charset, 'EUC-JP';
 };
 
 subtest 'type()' => sub {
-    $Header = {};
+    %header = ();
     is $header->type, 'text/html';
     my @got = $header->type;
     my @expected = ( 'text/html', 'charset=ISO-8859-1' );
     is_deeply \@got, \@expected;
 
-    $Header = { -type => 'text/plain; charset=EUC-JP' };
+    %header = ( -type => 'text/plain; charset=EUC-JP' );
     is $header->type, 'text/plain';
     @got = $header->type;
     @expected = ( 'text/plain', 'charset=EUC-JP' );
     is_deeply \@got, \@expected;
 
-    $Header = { -type => 'text/plain; charset=EUC-JP; Foo=1' };
+    %header = ( -type => 'text/plain; charset=EUC-JP; Foo=1' );
     is $header->type, 'text/plain';
     @got = $header->type;
     @expected = ( 'text/plain', 'charset=EUC-JP; Foo=1' );
     is_deeply \@got, \@expected;
 
-    $Header = { -charset => 'utf-8' };
+    %header = ( -charset => 'utf-8' );
     $header->type( 'text/plain; charset=EUC-JP' );
-    is_deeply $Header, { -type => 'text/plain; charset=EUC-JP' };
+    is_deeply $blosxom::header, { -type => 'text/plain; charset=EUC-JP' };
 
-    $Header = { -type => 'text/plain', -charset => 'utf-8' };
+    %header = ( -type => 'text/plain', -charset => 'utf-8' );
     @got = $header->type;
     @expected = ( 'text/plain', 'charset=utf-8' );
     is_deeply \@got, \@expected;
 
-    $Header = { -type => 'text/plain; Foo=1', -charset => 'utf-8' };
+    %header = ( -type => 'text/plain; Foo=1', -charset => 'utf-8' );
     @got = $header->type;
     @expected = ( 'text/plain', 'Foo=1; charset=utf-8' );
     is_deeply \@got, \@expected;
 
-    $Header = {
+    %header = (
         -type    => 'text/plain; charset=euc-jp',
         -charset => 'utf-8',
-    };
+    );
     @got = $header->type;
     @expected = ( 'text/plain', 'charset=euc-jp' );
     is_deeply \@got, \@expected;
 
-    $Header = { -type => q{} };
+    %header = ( -type => q{} );
     is $header->type, q{};
 };
 
 subtest 'field_names()' => sub {
-    $Header = {
+    %header = (
         -nph        => 'foo',
         -charset    => 'foo',
         -status     => 'foo',
@@ -208,7 +212,7 @@ subtest 'field_names()' => sub {
         -bar        => q{},
         -baz        => q{},
         -qux        => q{},
-    };
+    );
 
     my @got = sort $header->field_names;
 
@@ -227,34 +231,34 @@ subtest 'field_names()' => sub {
 };
 
 subtest 'p3p()' => sub {
-    $Header = {};
+    %header = ();
     $header->p3p( 'CAO' );
-    is_deeply $Header, { -p3p => 'CAO' };
+    is_deeply \%header, { -p3p => 'CAO' };
 
-    $Header = {};
+    %header = ();
     $header->p3p( 'CAO DSP LAW CURa' );
-    is_deeply $Header, { -p3p => [qw/CAO DSP LAW CURa/] };
+    is_deeply \%header, { -p3p => [qw/CAO DSP LAW CURa/] };
 
-    $Header = {};
+    %header = ();
     $header->p3p( qw/CAO DSP LAW CURa/ );
-    is_deeply $Header, { -p3p => [qw/CAO DSP LAW CURa/] };
+    is_deeply \%header, { -p3p => [qw/CAO DSP LAW CURa/] };
 
-    $Header = { -p3p => 'CAO' };
+    %header = ( -p3p => 'CAO' );
     is $header->p3p, 'CAO';
 
-    $Header = { -p3p => [qw/CAO DSP LAW CURa/] };
+    %header = ( -p3p => [qw/CAO DSP LAW CURa/] );
     is $header->p3p, 'CAO';
     my @got = $header->p3p;
     my @expected = qw( CAO DSP LAW CURa );
     is_deeply \@got, \@expected;
 
-    $Header = { -p3p => [ 'CAO DSP', 'LAW CURa' ] };
+    %header = ( -p3p => [ 'CAO DSP', 'LAW CURa' ] );
     is $header->p3p, 'CAO';
     @got = $header->p3p;
     @expected = qw( CAO DSP LAW CURa );
     is_deeply \@got, \@expected;
 
-    $Header = { -p3p => 'CAO DSP LAW CURa' };
+    %header = ( -p3p => 'CAO DSP LAW CURa' );
     is $header->p3p, 'CAO';
     @got = $header->p3p;
     @expected = qw( CAO DSP LAW CURa );
@@ -262,15 +266,15 @@ subtest 'p3p()' => sub {
 };
 
 subtest 'cookie()' => sub {
-    $Header = {};
+    %header = ();
     $header->cookie( 'foo' );
-    is_deeply $Header, { -cookie => 'foo' };
+    is_deeply \%header, { -cookie => 'foo' };
 
-    $Header = {};
+    %header = ();
     $header->cookie( 'foo', 'bar' );
-    is_deeply $Header, { -cookie => [qw/foo bar/] };
+    is_deeply \%header, { -cookie => [qw/foo bar/] };
 
-    $Header = { -cookie => [qw/foo bar/] };
+    %header = ( -cookie => [qw/foo bar/] );
     is $header->cookie, 'foo';
     my @got = $header->cookie;
     my @expected = qw( foo bar );
@@ -278,26 +282,49 @@ subtest 'cookie()' => sub {
 };
 
 subtest 'nph()' => sub {
-    $Header = {};
+    %header = ();
     ok !$header->nph;
     $header->nph( 1 );
     ok $header->nph;
-    is_deeply $Header, { -nph => 1 };
+    is_deeply \%header, { -nph => 1 };
 };
 
 subtest 'attachment()' => sub {
-    $Header = {};
+    %header = ();
     is $header->attachment, undef;
     $header->attachment( 'genome.jpg' );
     is $header->attachment, 'genome.jpg';
-    is_deeply $Header, { -attachment => 'genome.jpg' };
+    is_deeply \%header, { -attachment => 'genome.jpg' };
 };
 
 subtest 'target()' => sub {
-    $Header = {};
+    %header = ();
     is $header->target, undef;
     $header->target( 'ResultsWindow' );
     is $header->target, 'ResultsWindow';
-    is_deeply $Header, { -target => 'ResultsWindow' };
+    is_deeply \%header, { -target => 'ResultsWindow' };
 };
 
+subtest 'each()' => sub {
+    #plan skip_all => 'not implemented yet';
+
+    %header = ( -foo => 'bar' );
+
+    while ( my $field = $header->each ) {
+        $header->delete( $field );
+    }
+
+    is_deeply \%header, { -type => q{} };
+
+    %header = ( -foo => 'bar' );
+
+    my @got;
+    $header->each( sub { push @got, @_ } );
+
+    my @expected = (
+        'Content-Type' => 'text/html; charset=ISO-8859-1',
+        'Foo'          => 'bar',
+    );
+
+    is_deeply \@got, \@expected;
+};
