@@ -1,9 +1,9 @@
 use strict;
 use Blosxom::Header::Adapter;
-use Test::More tests => 15;
+use Test::More tests => 18;
 
 my %adaptee;
-tie my %adapter => 'Blosxom::Header::Adapter' => \%adaptee;
+my $adapter = tie my %adapter => 'Blosxom::Header::Adapter' => \%adaptee;
 
 %adaptee = ( -attachment => 'genome.jpg' );
 is $adapter{Content_Disposition}, 'attachment; filename="genome.jpg"';
@@ -36,3 +36,9 @@ is_deeply \%adaptee, {};
 %adaptee = ( -content_disposition => 'inline' );
 is delete $adapter{Content_Disposition}, 'inline';
 is_deeply \%adaptee, {};
+
+%adaptee = ();
+is $adapter->attachment, undef;
+$adapter->attachment( 'genome.jpg' );
+is $adapter->attachment, 'genome.jpg';
+is $adaptee{-attachment}, 'genome.jpg';

@@ -1,6 +1,6 @@
 use strict;
 use Blosxom::Header::Adapter;
-use Test::More tests => 15;
+use Test::More tests => 17;
 
 my %adaptee;
 tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
@@ -14,9 +14,11 @@ is each %adapter, undef;
 
 %adaptee = ( -charset => 'foo', -nph => 1 );
 is each %adapter, 'Content-Type';
+is each %adapter, 'Date';
 is each %adapter, undef;
 
 %adaptee = ( -type => q{}, -charset => 'foo', -nph => 1 );
+is each %adapter, 'Date';
 is each %adapter, undef;
 
 %adaptee = ( -foo => 'bar' );

@@ -1,6 +1,6 @@
 use strict;
 use Blosxom::Header;
-use Test::More tests => 20;
+use Test::More tests => 22;
 use Test::Warn;
 use Test::Exception;
 
@@ -24,6 +24,7 @@ isa_ok $header, 'Blosxom::Header';
 can_ok $header, qw(
     clear delete exists field_names get set push_cookie push_p3p
     attachment charset cookie expires nph p3p status target type
+    last_modified date
 );
 
 subtest 'exists()' => sub {
@@ -97,6 +98,26 @@ subtest 'expires()' => sub {
     is $header{-expires}, 'Sat, 07 Jul 2012 05:05:10 GMT';
 };
 
+subtest 'date()' => sub {
+    %header = ();
+    is $header->date, undef;
+
+    my $now = 1341637509;
+    $header->date( $now );
+    is $header->date, $now;
+    is $header{-date}, 'Sat, 07 Jul 2012 05:05:09 GMT';
+};
+
+subtest 'last_modified()' => sub {
+    %header = ();
+    is $header->last_modified, undef;
+
+    my $now = 1341637509;
+    $header->last_modified( $now );
+    is $header->last_modified, $now;
+    is $header{-last_modified}, 'Sat, 07 Jul 2012 05:05:09 GMT';
+};
+
 subtest 'push_cookie()' => sub {
     %header = ();
 
@@ -111,6 +132,11 @@ subtest 'push_cookie()' => sub {
 
     is $header->push_cookie( 'baz' ), 3, '_push()';
     is_deeply $header{-cookie}, [ 'foo', 'bar', 'baz' ];
+
+    %header = ();
+    $header->push_cookie({ -name => 'ID', -value => 123456 });
+    my $got = $header->cookie;
+    isa_ok $got, 'CGI::Cookie';
 };
 
 subtest 'status()' => sub {
@@ -219,6 +245,7 @@ subtest 'field_names()' => sub {
     my @expected = qw(
         Content-Disposition
         Content-Type
+        Date
         Expires
         Foo-bar
         P3P
@@ -279,6 +306,11 @@ subtest 'cookie()' => sub {
     my @got = $header->cookie;
     my @expected = qw( foo bar );
     is_deeply \@got, \@expected;
+
+    %header = ();
+    $header->cookie({ -name => 'ID', -value => 123456 });
+    my $got = $header->cookie;
+    isa_ok $got, 'CGI::Cookie';
 };
 
 subtest 'nph()' => sub {
@@ -327,4 +359,11 @@ subtest 'each()' => sub {
     );
 
     is_deeply \@got, \@expected;
+
+    $header->each( sub {
+        my $f = shift;
+        $header->delete( $f );
+    });
+
+    is_deeply \%header, { -type => q{} };
 };

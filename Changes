@@ -1,5 +1,12 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.05007 Jul 13, 2012
+  - Add date() and last_modified()
+  - When cookie() or push_cookie() receives hash references,
+    these methods create CGI::Cookie objects
+  - Requires CGI::Cookie
+  - Use 'parent' instead of 'base'
+
 0.05006 Jul 7, 2012
   - add each() method
   - requires HTTP::Date and CGI::Util

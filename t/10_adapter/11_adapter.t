@@ -1,13 +1,13 @@
 use strict;
 use Blosxom::Header::Adapter;
-use Test::More tests => 21;
+use Test::More tests => 16;
 
 my %adaptee;
 my $adapter = tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
 isa_ok $adapter, 'Blosxom::Header::Adapter';
 can_ok $adapter, qw(
     FETCH STORE DELETE EXISTS CLEAR FIRSTKEY NEXTKEY SCALAR
-    attachment nph normalize denormalize
+    attachment nph normalize denormalize has_date_header
 );
 
 # SCALAR
@@ -37,22 +37,10 @@ is_deeply \%adaptee, { -bar => 'baz' };
 is $adapter{Foo}, 'bar';
 is $adapter{Bar}, undef;
 
-%adaptee = ( -expires => 1341637509 );
-is $adapter{Expires}, 'Sat, 07 Jul 2012 05:05:09 GMT';
-%adaptee = ( -expires => q{} );
-is $adapter{Expires}, undef;
-
 # STORE
 %adaptee = ();
 $adapter{Foo} = 'bar';
 is_deeply \%adaptee, { -foo => 'bar' };
-
-# attachment()
-%adaptee = ();
-is $adapter->attachment, undef;
-$adapter->attachment( 'genome.jpg' );
-is $adapter->attachment, 'genome.jpg';
-is $adaptee{-attachment}, 'genome.jpg';
 
 # nph()
 %adaptee = ();

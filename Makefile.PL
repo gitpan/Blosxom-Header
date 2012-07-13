@@ -5,8 +5,10 @@ all_from 'lib/Blosxom/Header.pm';
 repository 'https://github.com/anazawa/p5-Blosxom-Header';
 
 requires 'constant'     => '1.17';
+requires 'parent'       => '0.225';
 requires 'Carp'         => '1.10';
 requires 'CGI::Util'    => '3.53';
+requires 'CGI::Cookie'  => '1.30';
 requires 'Exporter'     => '5.63';
 requires 'HTTP::Date'   => '6.02';
 requires 'HTTP::Status' => '6.03';
@@ -16,5 +18,7 @@ test_requires 'Test::Exception' => '0.31';
 test_requires 'Test::More'      => '0.98';
 test_requires 'Test::Pod'       => '1.45';
 test_requires 'Test::Warn'      => '0.24';
+
+tests 't/*.t t/*/*.t xt/*.t';
 
 WriteAll;
