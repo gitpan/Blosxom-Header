@@ -26,6 +26,7 @@ t/20_singleton.t
 t/21_instance.t
 t/22_functions.t
 t/30_plugins.t
+t/cookie.t
 t/plugins/bar
 t/plugins/foo
 xt/pod.t

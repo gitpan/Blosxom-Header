@@ -7,7 +7,7 @@ use constant USELESS => 'Useless use of %s with no values';
 use Blosxom::Header::Adapter;
 use Carp qw/carp croak/;
 
-our $VERSION = '0.05007';
+our $VERSION = '0.05008';
 
 our @EXPORT_OK = qw(
     header_get  header_set  header_exists header_delete
@@ -73,12 +73,59 @@ sub clear  { %{ $_[0] } = ()         }
 sub field_names { keys %{ $_[0] } }
 
 sub each {
-    my ( $self, $code ) = @_;
-    return each %{ $self } unless ref $code eq 'CODE';
+    my ( $self, $callback ) = @_;
+    return each %{ $self } unless ref $callback eq 'CODE';
     my %header = %{ $self }; # copy
-    while ( my @args = each %header ) { $code->( @args ) }
+    while ( my @args = each %header ) { $callback->( @args ) }
 }
 
+sub is_empty { not %{ $_[0] } }
+sub flatten  { ( %{ $_[0] } ) }
+
+sub set_cookie {
+    require CGI::Cookie;
+
+    my $self  = shift;
+    my $name  = shift;
+    my $value = ref $_[0] eq 'HASH' ? shift : { value => shift };
+
+    my @old_cookies;
+    if ( my $cookies = $self->{Set_Cookie} ) {
+        @old_cookies = ref $cookies eq 'ARRAY' ? @{ $cookies } : $cookies;
+    }
+
+    my @new_cookies;
+    for my $cookie ( @old_cookies ) {
+        next if ref $cookie eq 'CGI::Cookie' and $cookie->name eq $name;
+        push @new_cookies, $cookie;
+    }
+
+    push @new_cookies, CGI::Cookie->new({ name => $name, %$value });
+
+    $self->{Set_Cookie} = @new_cookies > 1 ? \@new_cookies : $new_cookies[0];
+
+    return;
+}
+
+sub get_cookie {
+    my ( $self, $name ) = @_;
+
+    my @cookies;
+    if ( my $cookies = $self->{Set_Cookie} ) {
+        @cookies = ref $cookies eq 'ARRAY' ? @{ $cookies } : $cookies;
+    }
+
+    my @values;
+    for my $cookie ( @cookies ) {
+        next unless ref $cookie eq 'CGI::Cookie';
+        next unless $cookie->name eq $name;
+        push @values, $cookie;
+    }
+
+    wantarray ? @values : $values[0];
+}
+
+# This method/function is obsolete and will be removed in 0.06
 sub push_cookie {
     require CGI::Cookie;
 
@@ -126,6 +173,7 @@ sub charset {
     uc $charset;
 }
 
+# This method is obsolete and will be removed in 0.06
 sub cookie {
     my $self = shift;
 
@@ -259,9 +307,6 @@ Blosxom::Header - Object representing CGI response headers
 This module provides Blosxom plugin developers
 with an interface to handle L<CGI> response headers.
 
-L<Blosxom::Header::Adapter> tells about why this module was written
-and how this module normalizes field names.
-
 =head2 VARIABLE
 
 =over 4
@@ -298,7 +343,8 @@ A synonym for C<< Blosxom::Header->instance->delete() >>.
 
 =item push_cookie( @cookies )
 
-A synonym for C<< Blosxom::Header->instance->push_cookie() >>.
+This function is obsolete and will be removed in 0.06.
+See L<"HANDLING COOKIES">.
 
 =item push_p3p( @tags )
 
@@ -315,13 +361,6 @@ A synonym for C<< Blosxom::Header->instance->each() >>.
 =item header_push()
 
 This function is obsolete and will be removed in 0.06.
-Use C<push_cookie()> or C<push_p3p()> instead.
-
-  header_push( Set_Cookie => @cookies );
-  header_push( P3P => @tags );
-  # become
-  push_cookie( @cookies );
-  push_p3p( @tags );
 
 =back
 
@@ -388,37 +427,8 @@ Returns values of deleted fields.
 
 =item $header->push_cookie( @cookies )
 
-Pushes the Set-Cookie headers onto HTTP headers.
-Accepts a list of cookies.
-Returns the number of the elements following the completed
-push_cookie().  
-
-  # get values of Set-Cookie headers
-  my @cookies = $header->cookie; # ( 'foo', 'bar' )
-
-  # add Set-Cookie header
-  $header->push_cookie( 'baz' );
-
-  @cookies = $header->cookie; # ( 'foo', 'bar', 'baz' )
-
-If you pass a hash reference to this method,
-a L<CGI::Cookie> object is created.
-
-  $header->push_cookie({
-      -name  => 'ID',
-      -value => 123456,
-  });
-
-cf.
-
-  use CGI::Cookie;
-
-  my $cookie = CGI::Cookie->new(
-      -name  => 'ID',
-      -value => 123456,
-  );
-
-  $header->push_cookie( $cookie );
+This method is obsolete and will be removed in 0.06.
+Use C<< $header->set_cookie >> instead.
 
 =item $header->push_p3p( @tags )
 
@@ -447,7 +457,7 @@ Returns the list of distinct names for the fields present in the header.
 The field names have case as returned by C<CGI::header()>.
 In scalar context return the number of distinct field names.
 
-=item $header->each( CodeRef )
+=item $header->each( \&callback )
 
 Apply a subroutine to each header field in turn.
 The callback routine is called with two parameters;
@@ -463,22 +473,71 @@ Any return values of the callback routine are ignored.
 
 =item ( $field, $value ) = $header->each
 
-Works like C<CORE::each> basically.
-
 When called in list context, returns two parameters;
 the name of the field and a value, so that you can iterate over it.
 When called in scalar context, returns only the field name
 for the next header field.
+When the header is entirely read, a null array is returned in list context,
+and C<undef> in scalar context.
+
+  while ( my ( $field, $value ) = $header->each ) {
+      print "$field: $value\n";
+  }
 
 You can reset the iterator by calling C<< $header->field_names >>.
 
-It is always safe to delete the field recently returned by
-C<< $header->each >>, which mean the following code will work:
+If you C<set()> or C<delete()> header fields while you're iterating
+over it, you may get entries skipped or duplicated, so don't.
 
-  while ( my $field = $header->each ) {
-      $header->delete( $field ); # This is safe
-  }
+=item $bool = $header->is_empty
 
+Returns a Boolean value telling whether C<< $header->field_names >>
+returns a null array or not.
+
+  $header->clear;
+  my $is_empty = $header->is_empty; # true
+
+=item @headers = $header->flatten
+
+Returns a new array that is a one-dimensional flattening of header fields.
+
+  my @headers = $header->flatten;
+  # => ( 'P3P', [ 'CAO', 'DSP' ], 'Content-Type', 'text/plain' )
+
+NOTE: This method does not flatten recursively.
+
+=back
+
+=head2 HANDLING COOKIES
+
+C<cookie()> and C<push_cookie()> are obsolete and will be removed in 0.06.
+These methods was replaced with C<set_cookie()> and C<get_cookie()>.
+
+=over 4
+
+=item $header->set_cookie( $name => $value )
+
+=item $header->set_cookie( $name => { value => $value, ... } )
+
+Overwrites existent cookie.
+
+  $header->set_cookie( ID => 123456 );
+
+  $header->set_cookie(
+     ID => {
+         value   => '123456',
+         path    => '/',
+         domain  => '.example.com',
+         expires => '+3M',
+      }
+  );
+
+=item $cookie = $header->get_cookie( $name )
+
+Returns a L<CGI::Cookie> object whose C<name()> is stringwise equal to C<$name>.
+
+  my $id = $header->get_cookie( 'ID' ); # CGI::Cookie object
+  my $value = $id->value; # 123456
 
 =back
 
@@ -486,7 +545,7 @@ C<< $header->each >>, which mean the following code will work:
 
 Most of these methods were named after parameters recognized by
 C<CGI::header()>.
-They can both be used to read and to set the value of a header.
+These can both be used to read and to set the value of a header.
 The value is set if you pass an argument to the method.
 If the given header wasn't defined then C<undef> would be returned.
 
@@ -514,23 +573,8 @@ Returns the upper-cased character set specified in the Content-Type header.
 
 =item $header->cookie
 
-Represents the Set-Cookie headers.
-The parameter can be an array.
-
-  $header->cookie( 'foo', 'bar' );
-  my @cookies = $header->cookie; # ( 'foo', 'bar' )
-
-If you pass a hash reference to this method, a L<CGI::Cookie> object is
-created.
-
-  $header->cookie({
-      -name  => 'ID',
-      -value => 123456,
-  });
-
-  my $cookie = $header->cookie; # CGI::Cookie object
-  my $name = $cookie->name; # ID
-  my $id = $cookie->value; # 123456
+This method is obsolete and will be removed in 0.06.
+Use C<< $header->get_cookie >> or C<< $header->set_cookie >> instead.
 
 =item $header->date
 

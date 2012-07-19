@@ -22,12 +22,6 @@ sub TIEHASH {
         -p3p        => 'P3P',
     };
 
-    $self->{iterator} = {
-        collection => [],
-        current    => 0,
-        size       => 0,
-    };
-
     $self;
 }
 
@@ -130,22 +124,36 @@ sub CLEAR {
 
 sub FIRSTKEY {
     my $self    = shift;
-    my $adaptee = $self->{adaptee};
+    my %adaptee = %{ $self->{adaptee} };
+    my $expires = delete $adaptee{-expires};
+    my $cookie  = delete $adaptee{-cookie};
+    my $nph     = delete $adaptee{-nph};
+    my $type    = !exists $adaptee{-type} || delete $adaptee{-type};
 
     my @field_names;
-    push @field_names, 'Content-Type' unless exists $adaptee->{-type};
-    push @field_names, 'Date' if $self->has_date_header;
-    for my $norm ( keys %{ $adaptee } ) {
-        next unless $adaptee->{ $norm };
-        next if $norm eq '-charset' or $norm eq '-nph';
-        push @field_names, $self->denormalize( $norm );
+
+    push @field_names, 'Status'              if delete $adaptee{-status};
+    push @field_names, 'Window-Target'       if delete $adaptee{-target};
+    push @field_names, 'P3P'                 if delete $adaptee{-p3p};
+    push @field_names, 'Set-Cookie'          if $cookie;
+    push @field_names, 'Expires'             if $expires;
+    push @field_names, 'Date'                if $expires || $cookie || $nph;
+    push @field_names, 'Content-Disposition' if delete $adaptee{-attachment};
+
+    while ( my ( $norm, $value ) = each %adaptee ) {
+        next if !$value or $norm eq '-charset';
+        $norm =~ s/^-//;
+        $norm =~ tr/_/-/;
+        push @field_names, ucfirst $norm;
     }
 
-    %{ $self->{iterator} } = (
+    push @field_names, 'Content-Type' if $type;
+
+    $self->{iterator} = {
         collection => \@field_names,
         size       => scalar @field_names,
         current    => 0,
-    );
+    };
 
     $self->NEXTKEY;
 }

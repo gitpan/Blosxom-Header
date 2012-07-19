@@ -32,6 +32,7 @@ is_deeply \%header, {};
 is push_p3p( 'CAO' ), 1;
 is $header{-p3p}, 'CAO';
 
+# OBSOLETE
 is push_cookie( 'foo' ), 1;
 is $header{-cookie}, 'foo';
 
