@@ -2,7 +2,8 @@ package Blosxom::Header::Adapter;
 use strict;
 use warnings;
 use Carp qw/carp/;
-use CGI::Util qw/expires/;
+use CGI::Util;
+use List::Util qw/first/;
 
 sub TIEHASH {
     my $class   = shift;
@@ -16,10 +17,20 @@ sub TIEHASH {
         -type       => q{},        -window_target => q{-target},
     };
 
-    $self->{field_name_of} = {
+    my %field_name_of = (
         -attachment => 'Content-Disposition', -cookie => 'Set-Cookie',
-        -target     => 'Window-Target',       -type   => 'Content-Type',
+        -type       => 'Content-Type',        -target => 'Window-Target',
         -p3p        => 'P3P',
+    );
+
+    $self->{denormalize} = sub {
+        my $norm = shift;
+        unless ( exists $field_name_of{ $norm } ) {
+            ( my $field = $norm ) =~ s/^-//;
+            $field =~ tr/_/-/;
+            return $field_name_of{ $norm } = ucfirst $field;
+        }
+        $field_name_of{ $norm };
     };
 
     $self;
@@ -59,14 +70,17 @@ sub FETCH {
         my $expires = $adaptee->{ $norm };
         return $expires ? expires( $expires ) : undef;
     }
-    elsif ( $norm eq '-date' and $self->has_date_header ) {
-        return expires( 0, 'http' );
+    elsif ( $norm eq '-date' and $self->date_header_is_fixed ) {
+        return expires( time );
     }
 
     $adaptee->{ $norm };
 }
 
 *EXISTS = \&FETCH;
+
+my %expires;
+sub expires { $expires{ $_[0] } ||= CGI::Util::expires( $_[0] ) }
 
 sub STORE {
     my $self    = shift;
@@ -83,9 +97,8 @@ sub STORE {
     elsif ( $norm eq '-content_disposition' ) {
         delete $adaptee->{-attachment};
     }
-    elsif ( $norm eq '-date' and $self->has_date_header ) {
-        carp( 'The Date header is fixed' );
-        return;
+    elsif ( $norm eq '-date' and $self->date_header_is_fixed ) {
+        return carp( 'The Date header is fixed' );
     }
 
     $adaptee->{ $norm } = $value;
@@ -109,9 +122,8 @@ sub DELETE {
         delete @{ $adaptee }{ $norm, '-attachment' };
         return $deleted;
     }
-    elsif ( $norm eq '-date' and $self->has_date_header ) {
-        carp( 'The Date header is fixed' );
-        return
+    elsif ( $norm eq '-date' and $self->date_header_is_fixed ) {
+        return carp( 'The Date header is fixed' );
     }
 
     delete $adaptee->{ $norm };
@@ -122,59 +134,46 @@ sub CLEAR {
     %{ $self->{adaptee} } = ( -type => q{} );
 }
 
-sub FIRSTKEY {
-    my $self    = shift;
-    my %adaptee = %{ $self->{adaptee} };
-    my $expires = delete $adaptee{-expires};
-    my $cookie  = delete $adaptee{-cookie};
-    my $nph     = delete $adaptee{-nph};
-    my $type    = !exists $adaptee{-type} || delete $adaptee{-type};
-
-    my @field_names;
-
-    push @field_names, 'Status'              if delete $adaptee{-status};
-    push @field_names, 'Window-Target'       if delete $adaptee{-target};
-    push @field_names, 'P3P'                 if delete $adaptee{-p3p};
-    push @field_names, 'Set-Cookie'          if $cookie;
-    push @field_names, 'Expires'             if $expires;
-    push @field_names, 'Date'                if $expires || $cookie || $nph;
-    push @field_names, 'Content-Disposition' if delete $adaptee{-attachment};
-
-    while ( my ( $norm, $value ) = each %adaptee ) {
-        next if !$value or $norm eq '-charset';
-        $norm =~ s/^-//;
-        $norm =~ tr/_/-/;
-        push @field_names, ucfirst $norm;
-    }
-
-    push @field_names, 'Content-Type' if $type;
-
-    $self->{iterator} = {
-        collection => \@field_names,
-        size       => scalar @field_names,
-        current    => 0,
-    };
-
-    $self->NEXTKEY;
-}
-
-sub NEXTKEY {
-    my $iterator = shift->{iterator};
-    return if $iterator->{current} >= $iterator->{size};
-    $iterator->{collection}->[ $iterator->{current}++ ];
-}
-
 sub SCALAR {
     my $self = shift;
-    my $scalar = $self->FIRSTKEY;
-    $self->{iterator}->{current}-- if $scalar;
-    $scalar;
+    my $header = $self->{adaptee};
+    return 1 unless exists $header->{-type}; 
+    first { $_ } values %{ $header };
 }
 
+sub field_names {
+    my $self   = shift;
+    my %header = %{ $self->{adaptee} };
+
+    my @fields;
+
+    push @fields, 'Status'        if delete $header{-status};
+    push @fields, 'Window-Target' if delete $header{-target};
+    push @fields, 'P3P'           if delete $header{-p3p};
+
+    push @fields, 'Set-Cookie' if my $cookie  = delete $header{-cookie};
+    push @fields, 'Expires'    if my $expires = delete $header{-expires};
+    push @fields, 'Date' if delete $header{-nph} or $cookie or $expires;
+
+    push @fields, 'Content-Disposition' if delete $header{-attachment};
+
+    # not ordered
+    delete $header{-charset};
+    while ( my ($norm, $value) = each %header ) {
+        next if !$value or $norm eq '-type';
+        push @fields, $self->{denormalize}->( $norm );
+    }
+
+    push @fields, 'Content-Type' if !exists $header{-type} or $header{-type};
+
+    @fields;
+}
+
+sub denormalize { shift->{denormalize}->( @_ ) }
+
 sub normalize {
-    my $self    = shift;
-    my $field   = lc shift;
-    my $norm_of = $self->{norm_of};
+    my $self  = shift;
+    my $field = lc shift;
 
     # transliterate dashes into underscores
     $field =~ tr{-}{_};
@@ -182,24 +181,9 @@ sub normalize {
     # add an initial dash
     $field = "-$field";
 
-    exists $norm_of->{ $field } ? $norm_of->{ $field } : $field;
-}
+    return $self->{norm_of}{$field} if exists $self->{norm_of}{$field};
 
-sub denormalize {
-    my $self = shift;
-    my $norm = shift;
-    my $field_name_of = $self->{field_name_of};
-
-    return $field_name_of->{ $norm } if exists $field_name_of->{ $norm };
-        
-    # get rid of an initial dash
-    ( my $field = $norm ) =~ s/^-//;
-
-    # transliterate underscores into dashes
-    $field =~ tr/_/-/;
-
-    # uppercase the first character
-    $field_name_of->{ $norm } = ucfirst $field;
+    $field;
 }
 
 sub attachment {
@@ -214,10 +198,12 @@ sub nph {
     $adaptee->{-nph};
 }
 
-sub has_date_header {
+sub date_header_is_fixed {
     my $adaptee = shift->{adaptee};
     $adaptee->{-expires} || $adaptee->{-cookie} || $adaptee->{-nph};
 }
+
+*has_date_header = \&date_header_is_fixed;
 
 1;
 
@@ -225,78 +211,28 @@ __END__
 
 =head1 NAME
 
-Blosxom::Header::Adapter - Creates a case-insensitive hash
+Blosxom::Header::Adapter - Adapter for CGI::header()
 
 =head1 SYNOPSIS
 
-  use CGI qw/header/;
   use Blosxom::Header::Adapter;
 
   my %adaptee = ( -type => 'text/plain' );
 
   tie my %adapter => 'Blosxom::Header::Adapter' => \%adaptee;
 
-  $adapter{Content_Length} = 1234;
+  # field names are case-insensitive
+  my $length = $adapter{'Content-Length'}; # 1234
+  $adapter{'Content_length'} = 4321;
 
   print header( %adaptee );
-  # Content-length: 1234
+  # Content-length: 4321
   # Content-Type: text/plain; charset=ISO-8859-1
   #
 
 =head1 DESCRIPTION
 
-Creates a case-insensitive hash.
-
-=head2 BACKGROUND
-
-Blosxom, an weblog application, globalizes C<$header> which is a reference to
-a hash. This application passes C<$header> to C<CGI::header()> to generate HTTP
-headers.
-
-  package blosxom;
-  use strict;
-  use warnings;
-  use CGI qw/header/;
-
-  our $header = { -type => 'text/html' };
-
-  # Loads plugins
-
-  print header( $header );
-
-Plugins may modify C<$header> directly because the variable is global.
-On the other hand, C<header()> doesn't care whether C<keys> of C<$header> are
-lowercased nor start with a dash.
-There is no agreement with how to normalize C<keys> of C<$header>.
-
-=head2 HOW THIS MODULE NORMALIZES FIELD NAMES
-
-To specify field names consistently, we need to normalize them.
-If you follow one of normalization rules, you can modify C<$header>
-consistently. This module normalizes them as follows.
-
-Remember how Blosxom initializes C<$header>:
-
-  $header = { -type => 'text/html' };
-
-A key C<-type> is starting with a dash and lowercased, and so this module
-follows the same rules:
-
-  'Status'  # not normalized
-  'status'  # not normalized
-  '-status' # normalized
-
-How about C<Content-Length>? It contains a dash.
-To avoid quoting when specifying hash keys, this module transliterates dashes
-into underscores in field names:
-
-  'Content-Length'  # not normalized
-  '-content-length' # not normalized
-  '-content_length' # normalized
-
-If you follow the above normalization rule, you can modify C<$header> directly.
-In other words, this module is compatible with the way modifying C<$header>
-directly when you follow the above rule.
+Adapter for L<CGI>::header().
 
 =head2 METHODS
 
@@ -304,21 +240,13 @@ directly when you follow the above rule.
 
 =item $adapter = tie %adapter, 'Blosxom::Header::Adapter', \%adaptee
 
-Associates a new hash instance with Blosxom::Header::Adapter.
+=item $value = $adapter{ $field }
 
 =item $adapter{ $field } = $value
 
-=item $value = $adapter{ $field }
-
 =item $deleted = delete $adapter{ $field }
 
-=item $bool = exists $adapter{ $field }
-
-=item $bool = %adapter
-
-=item $field = each %adapter
-
-=item ( $field, $value ) = each %adapter
+=item $bool = scalar %adapter
 
 =item %adapter = ()
 
@@ -326,11 +254,15 @@ A shortcut for
 
   %adaptee = ( -type => q{} );
 
-=item $adapter->nph()
+=item $bool = exists %adapter{ $field }
 
-=item $adapter->attachment()
+=item $norm = $adapter->normalize( $field )
 
-=item $adapter->has_date_header()
+=item $adapter->nph
+
+=item $adapter->attachment
+
+=item $bool = $adapter->date_header_is_fixed
 
 =back
 
@@ -341,15 +273,14 @@ A shortcut for
 =item The Date header is fixed
 
 You attempted to modify the Date header when any of
-<-cookie>, C<-nph> or C<-expires> was set.
-See C<Blosxom::Header::date()>.
+C<-cookie>, C<-nph> or C<-expires> was set.
 
 =back
 
 =head1 SEE ALSO
 
-L<Blosxom::Header>,
-L<perltie>
+L<Blosxom::Header::Iterator>,
+L<Tie::Hash>
 
 =head1 AUTHOR
 
@@ -357,13 +288,7 @@ Ryo Anazawa (anazawa@cpan.org)
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2011-2012 Ryo Anazawa. All rights reserved.
-
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 =cut

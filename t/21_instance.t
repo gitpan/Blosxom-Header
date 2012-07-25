@@ -1,6 +1,6 @@
 use strict;
 use Blosxom::Header;
-use Test::More tests => 24;
+use Test::More tests => 25;
 use Test::Warn;
 use Test::Exception;
 
@@ -51,7 +51,7 @@ subtest 'set()' => sub {
     warning_is { $header->set( 'Foo' ) }
         'Odd number of elements in hash assignment';
 
-    warning_is { $header->set } 'Useless use of set() with no values';
+        #warning_is { $header->set } 'Useless use of set() with no values';
 
     $header->set(
         Foo => 'bar',
@@ -75,7 +75,7 @@ subtest 'delete()' => sub {
         -baz => 'qux',
     );
 
-    warning_is { $header->delete } 'Useless use of delete() with no values';
+    #warning_is { $header->delete } 'Useless use of delete() with no values';
 
     my @deleted = $header->delete( qw/foo bar/ );
     is_deeply \@deleted, [ 'bar', 'baz' ], 'delete() multiple elements';
@@ -156,26 +156,20 @@ subtest 'charset()' => sub {
     %header = ( -charset => q{} );
     is $header->charset, undef;
 
-    %header = ( -charset => 'utf-8' );
-    is $header->charset, 'UTF-8';
-
-    %header = ( -type => q{}, -charset => 'utf-8' );
+    %header = ( -type => q{} );
     is $header->charset, undef;
 
     %header = ( -type => 'text/html; charset=euc-jp' );
     is $header->charset, 'EUC-JP';
 
-    %header = ( -type => 'text/html; charset=euc-jp', -charset => q{} );
-    is $header->charset, 'EUC-JP';
-
     %header = ( -type => 'text/html; charset=iso-8859-1; Foo=1' );
     is $header->charset, 'ISO-8859-1';
 
-    %header = (
-        -type    => 'text/html; charset=euc-jp',
-        -charset => 'utf-8',
-    );
-    is $header->charset, 'EUC-JP';
+    SKIP: {
+        skip 'not supported yet', 1;
+        %header = ( -type => 'text/html; charset="iso-8859-1"; Foo=1' );
+        is $header->charset, 'ISO-8859-1';
+    }
 };
 
 subtest 'type()' => sub {
@@ -344,6 +338,7 @@ subtest 'each()' => sub {
     %header = ( -foo => 'bar' );
 
     while ( my $field = $header->each ) {
+        #warn $field;
         $header->delete( $field ); # not supported
     }
 
@@ -355,18 +350,18 @@ subtest 'each()' => sub {
     $header->each( sub { push @got, @_ } );
 
     my @expected = (
-        'Content-Type' => 'text/html; charset=ISO-8859-1',
         'Foo'          => 'bar',
+        'Content-Type' => 'text/html; charset=ISO-8859-1',
     );
 
     is_deeply \@got, \@expected;
 
-    $header->each( sub {
-        my $f = shift;
-        $header->delete( $f ); # not supported
-    });
+    #$header->each( sub {
+    #    my $f = shift;
+    #    $header->delete( $f ); # not supported
+    #});
 
-    is_deeply \%header, { -type => q{} };
+    #is_deeply \%header, { -type => q{} };
 };
 
 subtest 'is_empty()' => sub {
@@ -390,4 +385,10 @@ subtest 'flatten()' => sub {
         'Content-Type', 'text/html; charset=ISO-8859-1',
     );
     is_deeply \@got, \@expected;
+};
+
+subtest 'as_hashref()' => sub {
+    %header = ();
+    $header->{Foo} = 'bar';
+    is_deeply \%header, { -foo => 'bar' };
 };

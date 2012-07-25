@@ -1,6 +1,6 @@
 use strict;
 use Blosxom::Header::Adapter;
-use Test::More tests => 17;
+use Test::More skip_all => 'deprecated';
 
 my %adaptee;
 tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;

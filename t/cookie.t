@@ -12,7 +12,6 @@ my %header;
 
 my $header = Blosxom::Header->instance;
 
-
 # set_cookie()
 
 %header = ();
@@ -48,7 +47,6 @@ $header->set_cookie( foo => { value => 'baz' } );
 $got = $header{-cookie};
 isa_ok $got, 'CGI::Cookie';
 is $got->value, 'baz';
-
 
 # get_cookie()
 

@@ -15,12 +15,12 @@ MANIFEST			This list of files
 META.yml
 README
 t/00_compile.t
+t/01_iterator.t
 t/10_adapter/10_normalization.t
 t/10_adapter/11_adapter.t
 t/10_adapter/12_content_type.t
 t/10_adapter/13_content_disposition.t
 t/10_adapter/14_date.t
-t/10_adapter/15_denormalization.t
 t/10_adapter/16_iterator.t
 t/20_singleton.t
 t/21_instance.t
@@ -29,4 +29,8 @@ t/30_plugins.t
 t/cookie.t
 t/plugins/bar
 t/plugins/foo
+tools/benchmark/denormalize.pl
+tools/benchmark/expires.pl
+tools/benchmark/field_names.pl
+tools/profile.pl
 xt/pod.t

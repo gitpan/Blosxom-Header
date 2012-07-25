@@ -1,5 +1,13 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.05009 Jul 26th, 2012
+  - Add as_hashref() method
+  - each() will return nothing in 0.06
+  - Exports header_iter() on demand
+  - each_header() is obsolete and removed in 0.06.
+    Use header_iter() instead
+  - Add content_type() as the alias of type()
+
 0.05008 Jul 20th, 2012
   - Add is_empty() and flatten()
   - cookie() and push_cookie() is obsolete and will be removed in 0.06.

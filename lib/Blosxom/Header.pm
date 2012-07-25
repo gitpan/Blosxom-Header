@@ -3,14 +3,15 @@ use 5.008_009;
 use strict;
 use warnings;
 use parent qw/Exporter/;
-use constant USELESS => 'Useless use of %s with no values';
+use overload '%{}' => 'as_hashref', 'bool' => 'boolify', 'fallback' => 1;
 use Blosxom::Header::Adapter;
 use Carp qw/carp croak/;
+use HTTP::Date ();
 
-our $VERSION = '0.05008';
+our $VERSION = '0.05009';
 
 our @EXPORT_OK = qw(
-    header_get  header_set  header_exists header_delete
+    header_get  header_set  header_exists header_delete header_iter
     header_push push_cookie push_p3p each_header
 );
 
@@ -18,17 +19,22 @@ sub header_get    { __PACKAGE__->instance->get( @_ )    }
 sub header_set    { __PACKAGE__->instance->set( @_ )    }
 sub header_exists { __PACKAGE__->instance->exists( @_ ) }
 sub header_delete { __PACKAGE__->instance->delete( @_ ) }
-sub each_header   { __PACKAGE__->instance->each( @_ )   }
+sub header_iter   { __PACKAGE__->instance->each( @_ )   }
 
-# The following function is obsolete and will be removed in 0.06
+# The following functions are obsolete and will be removed in 0.06
 sub header_push { __PACKAGE__->instance->_push( @_ ) }
+*each_header = \&header_iter;
 
-sub _carp {
-    my ( $format, @args ) = @_;
-    carp( sprintf $format, @args );
-}
+my %str2time;
+sub _str2time { $str2time{ $_[0] } ||= HTTP::Date::str2time( $_[0] ) }
+
+my %time2str;
+sub _time2str { $time2str{ $_[0] } ||= HTTP::Date::time2str( $_[0] ) }
 
 my $instance;
+
+my %header;
+my $adapter;
 
 sub instance {
     my $class = shift;
@@ -37,8 +43,8 @@ sub instance {
     return $instance if defined $instance;
 
     if ( $class->is_initialized ) {
-        tie my %self => 'Blosxom::Header::Adapter' => $blosxom::header;
-        return $instance = bless \%self, $class;
+        $adapter = tie %header, 'Blosxom::Header::Adapter', $blosxom::header;
+        return $instance = bless \do { my $anon_scalar }, $class;
     }
 
     croak( q{$blosxom::header hasn't been initialized yet} );
@@ -48,61 +54,109 @@ sub has_instance { $instance }
 
 sub is_initialized { ref $blosxom::header eq 'HASH' }
 
+sub as_hashref { \%header }
+sub boolify { 1 }
+
 sub get {
     my ( $self, @fields ) = @_;
-    return _carp( USELESS, 'get()' ) unless @fields;
-    @{ $self }{ @fields };
+    @header{ @fields };
 }
 
 sub set {
-    my ( $self, %fields ) = @_;
-    return _carp( USELESS, 'set()' ) unless %fields;
-    @{ $self }{ keys %fields } = values %fields; # merge
+    my ( $self, %new_header ) = @_;
+    @header{ keys %new_header } = values %new_header; # merge!
     return;
 }
 
 sub delete {
     my ( $self, @fields ) = @_;
-    return _carp( USELESS, 'delete()' ) unless @fields;
-    delete @{ $self }{ @fields };
+    delete @header{ @fields };
 }
 
-sub exists { exists $_[0]->{ $_[1] } }
-sub clear  { %{ $_[0] } = ()         }
+sub exists {
+    my ( $self, $field ) = @_;
+    exists $header{ $field };
+}
 
-sub field_names { keys %{ $_[0] } }
+sub clear { %header = () }
+
+sub field_names { $adapter->field_names }
 
 sub each {
     my ( $self, $callback ) = @_;
-    return each %{ $self } unless ref $callback eq 'CODE';
-    my %header = %{ $self }; # copy
-    while ( my @args = each %header ) { $callback->( @args ) }
+
+    if ( ref $callback eq 'CODE' ) {
+        for my $field ( $adapter->field_names ) {
+            $callback->( $field, $header{ $field } );
+        }
+    }
+    elsif ( defined wantarray ) {
+        return $self->_each;
+    }
+    else {
+        croak( 'Must provide a code reference to each()' );
+    }
+
+    return;
 }
 
-sub is_empty { not %{ $_[0] } }
-sub flatten  { ( %{ $_[0] } ) }
+# This method is deprecated and will be remove in 0.06
+my %iterator;
+sub _each {
+    my $self = shift;
+
+    if ( $iterator{is_exhausted} or !%iterator ) {
+        my @fields = $adapter->field_names;
+        %iterator = (
+            collection => \@fields,
+            size       => scalar @fields,
+            current    => 0,
+        );
+    }
+
+    if ( $iterator{current} < $iterator{size} ) {
+        my $field = $iterator{collection}[ $iterator{current}++ ];
+        return wantarray ? ( $field, $header{ $field } ) : $field;
+    }
+    else {
+        $iterator{is_exhausted}++;
+    }
+
+    return;
+}
+
+sub is_empty { not %header }
+
+sub flatten {
+    my $self = shift;
+    map { $_, $header{$_} } $adapter->field_names;
+}
 
 sub set_cookie {
+    my ( $self, $name, $value ) = @_;
+
     require CGI::Cookie;
 
-    my $self  = shift;
-    my $name  = shift;
-    my $value = ref $_[0] eq 'HASH' ? shift : { value => shift };
+    my $new_cookie = CGI::Cookie->new(do {
+        my %args = ref $value eq 'HASH' ? %{ $value } : ( value => $value );
+        $args{name} = $name;
+        \%args;
+    });
 
-    my @old_cookies;
-    if ( my $cookies = $self->{Set_Cookie} ) {
-        @old_cookies = ref $cookies eq 'ARRAY' ? @{ $cookies } : $cookies;
+    my @cookies;
+    my $offset = 0;
+    if ( my $cookies = $header{Set_Cookie} ) {
+        @cookies = ref $cookies eq 'ARRAY' ? @{ $cookies } : $cookies;
+        for my $cookie ( @cookies ) {
+            last if ref $cookie eq 'CGI::Cookie' and $cookie->name eq $name;
+            $offset++;
+        }
     }
 
-    my @new_cookies;
-    for my $cookie ( @old_cookies ) {
-        next if ref $cookie eq 'CGI::Cookie' and $cookie->name eq $name;
-        push @new_cookies, $cookie;
-    }
+    # add/overwrite CGI::Cookie object
+    splice @cookies, $offset, 1, $new_cookie;
 
-    push @new_cookies, CGI::Cookie->new({ name => $name, %$value });
-
-    $self->{Set_Cookie} = @new_cookies > 1 ? \@new_cookies : $new_cookies[0];
+    $header{Set_Cookie} = @cookies > 1 ? \@cookies : $cookies[0];
 
     return;
 }
@@ -110,16 +164,13 @@ sub set_cookie {
 sub get_cookie {
     my ( $self, $name ) = @_;
 
-    my @cookies;
-    if ( my $cookies = $self->{Set_Cookie} ) {
-        @cookies = ref $cookies eq 'ARRAY' ? @{ $cookies } : $cookies;
-    }
-
     my @values;
-    for my $cookie ( @cookies ) {
-        next unless ref $cookie eq 'CGI::Cookie';
-        next unless $cookie->name eq $name;
-        push @values, $cookie;
+    if ( my $cookies = $header{Set_Cookie} ) {
+        @values = grep {
+            ref $_ eq 'CGI::Cookie' and $_->name eq $name
+        } (
+            ref $cookies eq 'ARRAY' ? @{ $cookies } : $cookies,
+        );
     }
 
     wantarray ? @values : $values[0];
@@ -140,34 +191,41 @@ sub push_cookie {
     $self->_push( Set_Cookie => @cookies );
 }
 
-sub push_p3p {
+sub push_p3p_tags {
     my $self = ref $_[0] ? shift : __PACKAGE__->instance;
     $self->_push( P3P => @_ );
 }
 
+*push_p3p = \&push_p3p_tags;
+
 sub _push {
     my ( $self, $field, @values ) = @_;
 
-    return _carp( USELESS, '_push()' ) unless @values;
+    return carp( 'Useless use of _push() with no values' ) unless @values;
 
-    if ( my $value = $self->{ $field } ) {
+    if ( my $value = $header{ $field } ) {
         return push @{ $value }, @values if ref $value eq 'ARRAY';
         unshift @values, $value;
     }
 
-    $self->{ $field } = @values > 1 ? \@values : $values[0];
+    $header{ $field } = @values > 1 ? \@values : $values[0];
 
     scalar @values;
 }
 
-sub attachment { shift->_adapter->attachment( @_ ) }
-sub nph        { shift->_adapter->nph( @_ )        }
+sub attachment {
+    my $self = shift;
+    $adapter->attachment( @_ );
+}
 
-sub _adapter { tied %{ $_[0] } }
+sub nph {
+    my $self = shift;
+    $adapter->nph( @_ );
+}
 
 sub charset {
     my $self = shift;
-    my $type = $self->{Content_Type};
+    my $type = $header{Content_Type};
     my ( $charset ) = $type =~ /charset=([^;]+)/ if $type;
     return unless $charset;
     uc $charset;
@@ -178,10 +236,10 @@ sub cookie {
     my $self = shift;
 
     if ( @_ ) {
-        delete $self->{Set_Cookie};
+        delete $header{Set_Cookie};
         $self->push_cookie( @_ );
     }
-    elsif ( my $cookie = $self->{Set_Cookie} ) {
+    elsif ( my $cookie = $header{Set_Cookie} ) {
         my @cookies = ref $cookie eq 'ARRAY' ? @{ $cookie } : ( $cookie );
         return wantarray ? @cookies : $cookies[0];
     }
@@ -193,38 +251,34 @@ sub last_modified { shift->_date_header( Last_modified => $_[0] ) }
 sub date          { shift->_date_header( Date => $_[0] )          }
 
 sub _date_header {
-    require HTTP::Date;
+    my ( $self, $field, $time ) = @_;
 
-    my ( $self, $field, $mtime ) = @_;
-
-    if ( defined $mtime ) {
-        $self->{ $field } = HTTP::Date::time2str( $mtime );
-        return;
+    if ( defined $time ) {
+        return $header{ $field } = _time2str( $time );
     }
-    elsif ( my $date = $self->{ $field } ) {
-        return HTTP::Date::str2time( $date );
+    elsif ( my $date = $header{ $field } ) {
+        return _str2time( $date );
     }
 
     return;
 }
 
 sub expires {
-    require HTTP::Date;
     my $self = shift;
-    return $self->{Expires} = shift if @_;
-    my $expires = $self->{Expires};
+    return $header{Expires} = shift if @_;
+    my $expires = $header{Expires};
     return unless $expires;
-    HTTP::Date::str2time( $expires );
+    _str2time( $expires );
 }
 
-sub p3p {
+sub p3p_tags {
     my $self = shift;
 
     if ( @_ ) {
         my @tags = @_ > 1 ? @_ : split / /, shift;
-        $self->{P3P} = @tags > 1 ? \@tags : $tags[0];
+        $header{P3P} = @tags > 1 ? \@tags : $tags[0];
     }
-    elsif ( my $tags = $self->{P3P} ) {
+    elsif ( my $tags = $header{P3P} ) {
         my @tags = ref $tags eq 'ARRAY' ? @{ $tags } : ( $tags );
         @tags = map { split / / } @tags;
         return wantarray ? @tags : $tags[0];
@@ -233,14 +287,18 @@ sub p3p {
     return;
 }
 
-sub type {
+*p3p = \&p3p_tags;
+
+sub content_type {
     my $self = shift;
-    return $self->{Content_Type} = shift if @_;
-    my $content_type = $self->{Content_Type};
+    return $header{Content_Type} = shift if @_;
+    my $content_type = $header{Content_Type};
     return q{} unless $content_type;
     my ( $type, $rest ) = split /;\s*/, $content_type, 2;
     wantarray ? ( lc $type, $rest ) : lc $type;
 }
+
+*type = \&content_type;
 
 sub status {
     my $self = shift;
@@ -249,10 +307,10 @@ sub status {
         require HTTP::Status;
         my $code = shift;
         my $message = HTTP::Status::status_message( $code );
-        return $self->{Status} = "$code $message" if $message;
+        return $header{Status} = "$code $message" if $message;
         carp( qq{Unknown status code "$code" passed to status()} );
     }
-    elsif ( my $status = $self->{Status} ) {
+    elsif ( my $status = $header{Status} ) {
         return substr( $status, 0, 3 );
     }
 
@@ -261,8 +319,8 @@ sub status {
 
 sub target {
     my $self = shift;
-    return $self->{Window_Target} = shift if @_;
-    $self->{Window_Target};
+    return $header{Window_Target} = shift if @_;
+    $header{Window_Target};
 }
 
 1;
@@ -275,94 +333,35 @@ Blosxom::Header - Object representing CGI response headers
 
 =head1 SYNOPSIS
 
-  # Object-oriented interface
-
   use Blosxom::Header;
 
   my $header = Blosxom::Header->instance;
 
+  my $status = $header->get( 'Status' ); # 304 Not Modified
+
   $header->set(
-      Status        => '304 Not Modified',
-      Last_Modified => 'Wed, 23 Sep 2009 13:36:33 GMT',
+      Content_Length => 12345,
+      Last_Modified  => 'Wed, 23 Sep 2009 13:36:33 GMT',
   );
-
-  my $status = $header->get( 'Status' );
-  my @deleted = $header->delete( qw/Content-Disposition Content-Length/ );
-
-
-  # Procedural interface
-
-  use Blosxom::Header qw/header_set header_get header_delete/;
-
-  header_set(
-      Status        => '304 Not Modified',
-      Last_Modified => 'Wed, 23 Sep 2009 13:36:33 GMT',
-  );
-
-  my $status = header_get( 'Status' );
-  my @deleted = header_delete( qw/Content-Disposition Content-Length/ );
 
 =head1 DESCRIPTION
 
 This module provides Blosxom plugin developers
 with an interface to handle L<CGI> response headers.
+Blosxom starts speaking HTTP at last.
 
-=head2 VARIABLE
+=head2 BACKGROUND
 
-=over 4
+Blosxom, an weblog application, globalizes C<$header> which is a hash reference.
+This application passes C<$header> to C<CGI::header()> to generate
+CGI response headers.
 
-=item $Header
-
-This variable isn't exported any more. Sorry for incovenience :(
-
-=back
-
-=head2 FUNCTIONS
-
-The following functions are exported on demand.
-
-=over 4
-
-=item @values = header_get( @fields )
-
-A synonym for C<< Blosxom::Header->instance->get() >>.
-
-=item header_set( $field => $value )
-
-=item header_set( $f1 => $v2, $f2 => $v2, ... )
-
-A synonym for C<< Blosxom::Header->instance->set() >>.
-
-=item $bool = header_exists( $field )
-
-A synonym for C<< Blosxom::Header->instance->exists() >>.
-
-=item @deleted = header_delete( @fields )
-
-A synonym for C<< Blosxom::Header->instance->delete() >>.
-
-=item push_cookie( @cookies )
-
-This function is obsolete and will be removed in 0.06.
-See L<"HANDLING COOKIES">.
-
-=item push_p3p( @tags )
-
-A synonym for C<< Blosxom::Header->instance->push_p3p() >>.
-
-=item each_header( CodeRef )
-
-=item $field = each_header()
-
-=item ( $field, $value ) = each_header()
-
-A synonym for C<< Blosxom::Header->instance->each() >>.
-
-=item header_push()
-
-This function is obsolete and will be removed in 0.06.
-
-=back
+Blosxom plugins may modify C<$header> directly because the variable is
+global.
+The problem is that there is no agreement with how to normalize C<keys>
+of C<$header>.
+This module standardizes this process and also provides some convenience
+methods.
 
 =head2 CLASS METHODS
 
@@ -400,6 +399,10 @@ Returns the value of one or more header fields.
 Accepts a list of field names case-insensitive.
 You can use underscores as a replacement for dashes in header names.
 
+  # field names are case-insensitive
+  $header->get( 'Content-Length' );
+  $header->get( 'Content_length' );
+
 =item $header->set( $field => $value )
 
 =item $header->set( $f1 => $v1, $f2 => $v2, ... )
@@ -408,44 +411,36 @@ Sets the value of one or more header fields.
 Accepts a list of named arguments.
 
 The $value argument must be a plain string, except for when the Set-Cookie
-or P3P header is specified.
-In exceptional cases, $value may be a reference to an array.
+header is specified.
+In an exceptional case, $value may be a reference to an array.
 
-  $header->set(
-      Set_Cookie => [ $cookie1, $cookie2 ],
-      P3P        => [ 'CAO', 'DSP', 'LAW', 'CURa' ],
-  );
+  use CGI::Cookie;
+
+  my $cookie1 = CGI::Cookie->new( -name => 'foo' );
+  my $cookie2 = CGI::Cookie->new( -name => 'bar' );
+
+  $header->set( Set_Cookie => [ $cookie1, $cookie2 ] );
 
 =item $bool = $header->exists( $field )
 
 Returns a Boolean value telling whether the specified HTTP header exists.
+
+  if ( $header->exists( 'ETag' ) ) {
+      ....
+  }
 
 =item @deleted = $header->delete( @fields )
 
 Deletes the specified fields from HTTP headers.
 Returns values of deleted fields.
 
-=item $header->push_cookie( @cookies )
-
-This method is obsolete and will be removed in 0.06.
-Use C<< $header->set_cookie >> instead.
-
-=item $header->push_p3p( @tags )
-
-Adds P3P tags to the P3P header.
-Accepts a list of P3P tags.
-
-  # get P3P tags
-  my @tags = $header->p3p; # ( 'CAO', 'DSP', 'LAW' )
-
-  # add P3P tags
-  $header->push_p3p( 'CURa' );
-
-  @tags = $header->p3p; # ( 'CAO', 'DSP', 'LAW', 'CURa' )
+  $header->delete( qw/Content-Type Content-Length Content-Disposition/ );
 
 =item $header->clear
 
 This will remove all header fields.
+
+  $header->clear;
 
 Internally, this method is a shortcut for
 
@@ -455,7 +450,15 @@ Internally, this method is a shortcut for
 
 Returns the list of distinct names for the fields present in the header.
 The field names have case as returned by C<CGI::header()>.
+
+  my @fields = $header->field_names;
+  # => ( 'Set-Cookie', 'Content-length', 'Content-Type' )
+
 In scalar context return the number of distinct field names.
+
+  if ( $header->field_names == 0 ) {
+      # no header fields
+  }
 
 =item $header->each( \&callback )
 
@@ -473,21 +476,7 @@ Any return values of the callback routine are ignored.
 
 =item ( $field, $value ) = $header->each
 
-When called in list context, returns two parameters;
-the name of the field and a value, so that you can iterate over it.
-When called in scalar context, returns only the field name
-for the next header field.
-When the header is entirely read, a null array is returned in list context,
-and C<undef> in scalar context.
-
-  while ( my ( $field, $value ) = $header->each ) {
-      print "$field: $value\n";
-  }
-
-You can reset the iterator by calling C<< $header->field_names >>.
-
-If you C<set()> or C<delete()> header fields while you're iterating
-over it, you may get entries skipped or duplicated, so don't.
+This feature is obsolete and will disappear in 0.06.
 
 =item $bool = $header->is_empty
 
@@ -499,19 +488,19 @@ returns a null array or not.
 
 =item @headers = $header->flatten
 
-Returns a new array that is a one-dimensional flattening of header fields.
+Returns pairs of fields and values.
 
   my @headers = $header->flatten;
-  # => ( 'P3P', [ 'CAO', 'DSP' ], 'Content-Type', 'text/plain' )
+  # => ( 'Status', '304 Not Modified', 'Content-Type', 'text/plain' )
 
-NOTE: This method does not flatten recursively.
+=item $header->as_hashref
 
 =back
 
-=head2 HANDLING COOKIES
+=head3 HANDLING COOKIES
 
 C<cookie()> and C<push_cookie()> are obsolete and will be removed in 0.06.
-These methods was replaced with C<set_cookie()> and C<get_cookie()>.
+These methods were replaced with C<set_cookie()> and C<get_cookie()>.
 
 =over 4
 
@@ -524,7 +513,7 @@ Overwrites existent cookie.
   $header->set_cookie( ID => 123456 );
 
   $header->set_cookie(
-     ID => {
+      ID => {
          value   => '123456',
          path    => '/',
          domain  => '.example.com',
@@ -539,44 +528,41 @@ Returns a L<CGI::Cookie> object whose C<name()> is stringwise equal to C<$name>.
   my $id = $header->get_cookie( 'ID' ); # CGI::Cookie object
   my $value = $id->value; # 123456
 
-=back
-
-=head2 CONVENIENCE METHODS
-
-Most of these methods were named after parameters recognized by
-C<CGI::header()>.
-These can both be used to read and to set the value of a header.
-The value is set if you pass an argument to the method.
-If the given header wasn't defined then C<undef> would be returned.
-
-Methods that deal with dates/times  always convert their value to
-system time (seconds since Jan 1, 1970).
-
-=over 4
-
-=item $header->attachment
-
-Can be used to turn the page into an attachment.
-Represents suggested name for the saved file.
-
-  $header->attachment( 'genome.jpg' );
-  my $attachment = $header->attachment; # genome.jpg
-
-  my $disposition = $header->get( 'Content-Disposition' );
-  # => 'attachment; filename="genome.jpg"'
-
-=item $header->charset
-
-Returns the upper-cased character set specified in the Content-Type header.
-
-  $charset = $header->charset; # UTF-8 (Readonly)
-
 =item $header->cookie
 
 This method is obsolete and will be removed in 0.06.
 Use C<< $header->get_cookie >> or C<< $header->set_cookie >> instead.
 
-=item $header->date
+=item $header->push_cookie( @cookies )
+
+This method is obsolete and will be removed in 0.06.
+Use C<< $header->set_cookie >> instead.
+
+  use CGI::Cookie;
+
+  my $cookie = CGI::Cookie->new(
+      -name  => 'ID',
+      -value => 123456,
+  );
+
+  $header->push_cookie( $cookie );
+
+  # become
+
+  $header->set_cookie( ID => 123456 );
+
+=back
+
+=head3 DATE HEADERS
+
+These methods always convert their value to system time
+(seconds since Jan 1, 1970).
+
+=over 4
+
+=item $mtime = $header->date
+
+=item $header->date( $mtime )
 
 This header represents the date and time at which the message
 was originated. This method expects machine time when the header
@@ -584,12 +570,9 @@ value is set.
 
   $header->date( time ); # set current date
 
-NOTE: If any of expires(), nph() or cookie() was set,
-the Date header would be added automatically
-and you couldn't modify the value.
-In other words, the Date header would be fixed.
+=item $mtime = $header->expires
 
-=item $header->expires
+=item $header->expires( $mtime )
 
 The Expires header gives the date and time after which the entity should be
 considered stale.
@@ -610,7 +593,9 @@ The following forms are all valid for this field:
   # another representation of 'now'
   $header->expires( time );
 
-=item $header->last_modified
+=item $mtime = $header->last_modified
+
+=item $header->last_modified( $mtime )
 
 This header indicates the date and time at which the resource was
 last modified. This method expects machine time when the header value is set.
@@ -622,6 +607,65 @@ last modified. This method expects machine time when the header value is set.
       }
   }
 
+=back
+
+=head3 CONVENIENCE METHODS
+
+The following methods were named after parameters recognized by
+C<CGI::header()>.
+These can both be used to read and to set the value of a header.
+The value is set if you pass an argument to the method.
+If the given header wasn't defined then C<undef> would be returned.
+
+=over 4
+
+=item $header->attachment
+
+Can be used to turn the page into an attachment.
+Represents suggested name for the saved file.
+
+  $header->attachment( 'genome.jpg' );
+  my $attachment = $header->attachment; # genome.jpg
+
+  my $disposition = $header->get( 'Content-Disposition' );
+  # => 'attachment; filename="genome.jpg"'
+
+=item $charset = $header->charset
+
+Returns the upper-cased character set specified in the Content-Type header.
+
+  $header->content_type( 'text/plain; charset=utf-8' );
+  my $charset = $header->charset; # UTF-8
+
+This method doesn't receive any arguments.
+
+  # wrong
+  $header->charset( 'euc-jp' );
+
+=item $media_type = $header->content_type
+
+=item ( $media_type, $rest ) = $header->content_type
+
+=item $header->content_type( 'text/html; charset=ISO-88591' )
+
+Represents the Content-Type header which indicates the media type of
+the message content. C<type()> is an alias.
+
+  $header->content_type( 'text/plain; charset=utf-8' );
+
+The value returned will be converted to lower case, and potential parameters
+will be chopped off and returned as a separate value if in an array context.
+
+  my $type = $header->content_type; # 'text/plain'
+  my @type = $header->content_type; # ( 'text/plain', 'charset=utf-8' )
+
+If there is no such header field, then the empty string is returned.
+This makes it safe to do the following:
+
+  if ( $header->content_type eq 'text/html' ) {
+      ...
+  }
+
 =item $header->nph
 
 If set to a true value,
@@ -630,9 +674,11 @@ a NPH (no-parse-header) script:
 
   $header->nph( 1 );
 
-=item $header->p3p
+=item @tags = $header->p3p_tags
 
-Represents the P3P header.
+=item $header->p3p_tags( @tags )
+
+Represents the P3P tags. C<p3p()> is an alias.
 The parameter can be an array or a space-delimited string.
 
   $header->p3p( qw/CAO DSP LAW CURa/ );
@@ -644,7 +690,25 @@ In this case, the outgoing header will be formatted as:
 
   P3P: policyref="/w3c/p3p.xml" CP="CAO DSP LAW CURa"
 
-=item $header->status
+=item @tags = $header->push_p3p_tags
+
+=item $header->push_p3p_tags( @tags )
+
+Adds P3P tags to the P3P header.
+C<push_p3p()> is an alias.
+Accepts a list of P3P tags.
+
+  # get P3P tags
+  my @tags = $header->p3p; # ( 'CAO', 'DSP', 'LAW' )
+
+  # add P3P tags
+  $header->push_p3p( 'CURa' );
+
+  @tags = $header->p3p; # ( 'CAO', 'DSP', 'LAW', 'CURa' )
+
+=item $code = $header->status
+
+=item $header->status( $code )
 
 Represents HTTP status code.
 
@@ -668,35 +732,123 @@ cf.
   $header->set( Window_Target => 'ResultsWindow' );
   $target = $header->get( 'Window-Target' ); # ResultsWindow
 
-=item $header->type
+=back
 
-The Content-Type header indicates the media type of the message content.
+=head2 FUNCTIONS
 
-  $header->type( 'text/plain; charset=utf-8' );
+The following functions are exported on demand.
 
-The above is a shortcut for
+=over 4
 
-  $header->set( Content_Type => 'text/plain; charset=utf-8' );
+=item @values = header_get( @fields )
 
-The value returned will be converted to lower case, and potential parameters
-will be chopped off and returned as a separate value if in an array context.
+A shortcut for
 
-  my $type = $header->type; # 'text/html'
-  my @type = $header->type; # ( 'text/html', 'charset=ISO-8859-1' )
+  @values = Blosxom::Header->instance->get( @fields );
 
-cf.
+=item header_set( $field => $value )
 
-  my $content_type = $header->get( 'Content-Type' );
-  # => 'text/html; charset=ISO-8859-1'
+=item header_set( $f1 => $v2, $f2 => $v2, ... )
 
-If there is no such header field, then the empty string is returned.
-This makes it safe to do the following:
+A shorcut for
 
-  if ( $header->type eq 'text/html' ) {
-      ...
-  }
+  Blosxom::Header->instance->set( $field => $value );
+  Blosxom::Header->instance->set( $f1 => $v1, $f2 => $v2, ... );
+
+=item $bool = header_exists( $field )
+
+A shortcut for
+
+  $bool = Blosxom::Header->instance->exists( $field );
+
+=item @deleted = header_delete( @fields )
+
+A shorcut for
+
+  @deleted = Blosxom::Header->instance->delete( @fields );
+
+=item push_cookie( @cookies )
+
+This function is obsolete and will be removed in 0.06.
+See L<"HANDLING COOKIES">.
+
+=item push_p3p( @tags )
+
+A shorcut for
+
+  Blosxom::Header->instance->push_p3p( @tags );
+
+=item header_iter( \&callback )
+
+A shortcut for 
+
+    Blosxom::Header->instance->each( \&callback );
+
+E.g.:
+
+  header_iter sub {
+      my ($field, $value) = @_;
+      print "$field: $value";
+  };
+
+  # wrong
+  my $field = header_iter();
+  my ( $field, $value ) = header_iter();
+
+=item each_header( CodeRef )
+
+=item $field = each_header()
+
+=item ( $field, $value ) = each_header()
+
+This function is obsolete and will be removed in 0.06.
+Use C<header_iter()> instead.
+
+=item header_push()
+
+This function is obsolete and will be removed in 0.06.
 
 =back
+
+=head1 LIMITATIONS
+
+Each header field is restricted to appear only once,
+except for the Set-Cookie header.
+That's why C<$header> can't C<push()> header fields unlike L<HTTP::Headers>
+objects. This feature originates from how C<CGI::header()> behaves.
+
+=head2 THE P3P HEADER
+
+C<CGI::header()> restricts where the policy-reference file is located
+and so you can't modify the location (C</w3c/p3p.xml>).
+The subroutine outputs the P3P header in the following format:
+
+  P3P: policyref="/w3c/p3p.xml" CP="%s"
+
+therefore the following code doesn't work correctly:
+
+  # wrong
+  $header->set( P3P => q{policyref="/path/to/p3p.xml"} );
+  $header->p3p( q{policyref="/path/to/p3p.xml"} );
+
+You're allowed to set or add P3P tags by using C<< $header->p3p_tags >>
+or C<< $header->push_p3p_tags >>.
+
+=head2 THE DATE HEADER
+
+C<CGI::header()> fixes the Date header when any of
+C<< $header->get( 'Set-Cookie' ) >>,
+C<< $header->expires >> or C<< $header->nph >> returns true. 
+When the Date header is fixed, you can't modify the value:
+
+  $header->set_cookie( ID => 123456 );
+  # => CGI::header() fixes the Date header
+
+  my $bool = $header->date == CORE::time(); # true
+
+  # wrong
+  $header->date( $time );
+  $header->set( Date => $date );
 
 =head1 DIAGNOSTICS
 
@@ -744,26 +896,20 @@ Blosxom was originally written by Rael Dornfest.
 L<The Blosxom Development Team|http://sourceforge.net/projects/blosxom/>
 succeeded to the maintenance.
 
-=head1 BUGS AND LIMITATIONS
+=head1 BUGS
 
 There are no known bugs in this module.
 Please report problems to ANAZAWA (anazawa@cpan.org).
 Patches are welcome.
 
-=head1 AUTHOR
+=head1 MAINTAINER
 
 Ryo Anazawa (anazawa@cpan.org)
 
-=head1 LICENSE AND COPYRIGHT
-
-Copyright (c) 2011-2012 Ryo Anazawa. All rights reserved.
+=head1 LICENSE
 
 This module is free software; you can redistribute it and/or
 modify it under the same terms as Perl itself. See L<perlartistic>.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 =cut
 

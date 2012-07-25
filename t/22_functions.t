@@ -1,10 +1,11 @@
 use strict;
-use Test::More tests => 16;
+use Test::Exception;
+use Test::More tests => 12;
 
 BEGIN {
     my @functions = qw(
         header_get    header_set  header_exists
-        header_delete push_cookie push_p3p each_header
+        header_delete push_p3p header_iter
     );
     use_ok 'Blosxom::Header', @functions;
     can_ok __PACKAGE__, @functions;
@@ -32,17 +33,11 @@ is_deeply \%header, {};
 is push_p3p( 'CAO' ), 1;
 is $header{-p3p}, 'CAO';
 
-# OBSOLETE
-is push_cookie( 'foo' ), 1;
-is $header{-cookie}, 'foo';
-
-my @field_names;
-each_header sub {
+my @got;
+header_iter sub {
     my $field = shift;
-    push @field_names, $field;
+    push @got, $field;
 };
-is_deeply [ sort @field_names ], [ qw/Content-Type Date P3P Set-Cookie/ ];
 
-%header = ();
-is each_header(), 'Content-Type';
-is each_header(), undef;
+is_deeply \@got, [qw/P3P Content-Type/];
+
