@@ -5,13 +5,10 @@ use Test::More tests => 16;
 my %adaptee;
 my $adapter = tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
 isa_ok $adapter, 'Blosxom::Header::Adapter';
-#can_ok $adapter, qw(
-#    FETCH STORE DELETE EXISTS CLEAR FIRSTKEY NEXTKEY SCALAR
-#    attachment nph normalize has_date_header
-#);
 can_ok $adapter, qw(
     FETCH STORE DELETE EXISTS CLEAR SCALAR
-    attachment nph normalize has_date_header denormalize field_names
+    attachment nph normalize date_header_is_fixed denormalize field_names
+    push_p3p_tags p3p_tags expires nph attachment
 );
 
 # SCALAR

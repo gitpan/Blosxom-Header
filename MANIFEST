@@ -10,6 +10,8 @@ inc/Module/Install/WriteAll.pm
 lib/Blosxom/Header.ja.pod
 lib/Blosxom/Header.pm
 lib/Blosxom/Header/Adapter.pm
+lib/Blosxom/Header/Hash.pm
+lib/Blosxom/Header/Util.pm
 Makefile.PL
 MANIFEST			This list of files
 META.yml
@@ -22,15 +24,22 @@ t/10_adapter/12_content_type.t
 t/10_adapter/13_content_disposition.t
 t/10_adapter/14_date.t
 t/10_adapter/16_iterator.t
+t/10_adapter/p3p.t
 t/20_singleton.t
 t/21_instance.t
 t/22_functions.t
 t/30_plugins.t
 t/cookie.t
+t/hash.t
 t/plugins/bar
+t/plugins/baz
 t/plugins/foo
+tools/benchmark/basic.pl
+tools/benchmark/delete.pl
 tools/benchmark/denormalize.pl
 tools/benchmark/expires.pl
 tools/benchmark/field_names.pl
+tools/benchmark/get.pl
+tools/benchmark/get_cookie.pl
 tools/profile.pl
 xt/pod.t

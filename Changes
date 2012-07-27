@@ -1,10 +1,15 @@
 Revision history for Perl extension Blosxom::Header.
 
+0.05010 Jul 28th, 2012
+  - Add new() method which is the alias of instance()
+  - p3p() and push_p3p() were renamed to p3p_tags() and push_p3p_tags(),
+    respectively. p3p() and push_p3p() methods will be removed in 0.06
+
 0.05009 Jul 26th, 2012
   - Add as_hashref() method
   - each() will return nothing in 0.06
   - Exports header_iter() on demand
-  - each_header() is obsolete and removed in 0.06.
+  - each_header() is obsolete and will be removed in 0.06.
     Use header_iter() instead
   - Add content_type() as the alias of type()
 

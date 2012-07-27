@@ -1,0 +1,14 @@
+package baz;
+use strict;
+use warnings;
+use Blosxom::Header;
+
+sub start { !$blosxom::static_entries }
+
+sub last {
+    my $header = Blosxom::Header->instance;
+    $header->{Baz} = 'qux';
+    return;
+}
+
+1;
