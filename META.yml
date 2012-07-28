@@ -31,10 +31,11 @@ requires:
   HTTP::Date: 6.02
   HTTP::Status: 6.03
   List::Util: 1.19
+  Scalar::Util: 1.19
   overload: 1.06
   parent: 0.225
   perl: 5.8.9
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/anazawa/p5-Blosxom-Header
-version: 0.05010
+version: 0.05012

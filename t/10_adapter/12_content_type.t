@@ -1,6 +1,7 @@
 use strict;
+use warnings;
 use Blosxom::Header::Adapter;
-use Test::More tests => 25;
+use Test::More tests => 27;
 
 my %adaptee;
 tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
@@ -9,11 +10,15 @@ tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
 is $adapter{Content_Type}, undef;
 ok !exists $adapter{Content_Type};
 ok !%adapter;
+is delete $adapter{Content_Type}, undef;
+is_deeply \%adaptee, { -type => q{} };
 
 %adaptee = ();
 is $adapter{Content_Type}, 'text/html; charset=ISO-8859-1';
 ok exists $adapter{Content_Type};
 ok %adapter;
+is delete $adapter{Content_Type}, 'text/html; charset=ISO-8859-1';
+is_deeply \%adaptee, { -type => q{} };
 
 %adaptee = ( -type => 'text/plain' );
 is $adapter{Content_Type}, 'text/plain; charset=ISO-8859-1';
@@ -55,18 +60,10 @@ is_deeply \%adaptee, { -type => 'text/plain; charset=utf-8' };
 %adaptee = ( -type => undef );
 is $adapter{Content_Type}, 'text/html; charset=ISO-8859-1';
 ok exists $adapter{Content_Type};
+ok %adapter;
 
-#%{ adaptee } = ();
-#undef $adapter{Content_Type};
-#is_deeply adaptee, { -type => q{} };
-
-%adaptee = ();
-is delete $adapter{Content_Type}, 'text/html; charset=ISO-8859-1';
-is_deeply \%adaptee, { -type => q{} };
-
-%adaptee = ( -type => q{} );
-is delete $adapter{Content_Type}, undef;
-is_deeply \%adaptee, { -type => q{} };
+%adaptee = ( -type => undef, -charset => 'utf-8' );
+is $adapter{Content_Type}, 'text/html; charset=utf-8';
 
 %adaptee = ( -type => 'text/plain', -charset => 'utf-8' );
 is delete $adapter{Content_Type}, 'text/plain; charset=utf-8';

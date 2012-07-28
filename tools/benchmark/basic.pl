@@ -12,30 +12,46 @@ use Blosxom::Header qw(
 }
 
 my $header = Blosxom::Header->new;
+my $tied_hash = $header->as_hashref;
+my $adapter = tied %{ $header };
 
 # STORE
-cmpthese(100000, {
-    overload => sub { $header->{Foo} = 'bar'       },
-    method   => sub { $header->set( Foo => 'bar' ) },
-    function => sub { header_set( Foo => 'bar' )   },
+cmpthese(300000, {
+    STORE     => sub { $adapter->STORE( Foo => 'bar' ) },
+    tied_hash => sub { $tied_hash->{Foo} = 'bar'       },
+    overload  => sub { $header->{Foo} = 'bar'          },
+    method    => sub { $header->set( Foo => 'bar' )    },
+    function  => sub { header_set( Foo => 'bar' )      },
 });
 
 # FETCH
-cmpthese(100000, {
-    overload => sub { my $value = $header->{Foo}        },
-    method   => sub { my $value = $header->get( 'Foo' ) },
-    function => sub { my $value = header_get( 'Foo' )   },
+cmpthese(300000, {
+    FETCH     => sub { my $value = $adapter->FETCH( 'Foo' ) },
+    tied_hash => sub { my $value = $tied_hash->{Foo}        },
+    overload  => sub { my $value = $header->{Foo}           },
+    method    => sub { my $value = $header->get( 'Foo' )    },
+    function  => sub { my $value = header_get( 'Foo' )      },
 });
 
 # EXISTS
-cmpthese(100000, {
-    overload => sub { my $bool = exists $header->{Foo}    },
-    method   => sub { my $bool = $header->exists( 'Foo' ) },
-    function => sub { my $bool = header_exists( 'Foo' )   },
+cmpthese(300000, {
+    EXISTS    => sub { my $bool = $adapter->EXISTS( 'Foo' ) },
+    tied_hash => sub { my $bool = exists $tied_hash->{Foo}  },
+    overload  => sub { my $bool = exists $header->{Foo}     },
+    method    => sub { my $bool = $header->exists( 'Foo' )  },
+    function  => sub { my $bool = header_exists( 'Foo' )    },
 });
 
 # DELETE
-cmpthese(100000, {
+cmpthese(300000, {
+    DELETE => sub {
+        $blosxom::header->{-foo} = 'bar';
+        my $deleted = $adapter->DELETE( 'Foo' )
+    },
+    tied_hash => sub {
+        $blosxom::header->{-foo} = 'bar';
+        my $deleted = delete $tied_hash->{Foo}
+    },
     overload => sub {
         $blosxom::header->{-foo} = 'bar';
         my $deleted = delete $header->{Foo}

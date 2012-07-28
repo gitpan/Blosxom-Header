@@ -1,13 +1,15 @@
 use strict;
+use warnings;
 use Blosxom::Header::Adapter;
 use Test::More tests => 16;
 
 my %adaptee;
 my $adapter = tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
-isa_ok $adapter, 'Blosxom::Header::Adapter';
+ok $adapter->isa( 'Blosxom::Header::Adapter' );
 can_ok $adapter, qw(
     FETCH STORE DELETE EXISTS CLEAR SCALAR
-    attachment nph normalize date_header_is_fixed denormalize field_names
+    normalize denormalize
+    date_header_is_fixed field_names
     push_p3p_tags p3p_tags expires nph attachment
 );
 
@@ -43,9 +45,57 @@ is $adapter{Bar}, undef;
 $adapter{Foo} = 'bar';
 is_deeply \%adaptee, { -foo => 'bar' };
 
-# nph()
-%adaptee = ();
-ok !$adapter->nph;
-$adapter->nph( 1 );
-ok $adapter->nph;
-is $adaptee{-nph}, 1;
+subtest 'nph()' => sub {
+    %adaptee = ();
+    ok !$adapter->nph;
+    $adapter->nph( 1 );
+    ok $adapter->nph;
+    is $adaptee{-nph}, 1;
+};
+
+subtest 'attachment()' => sub {
+    %adaptee = ();
+    is $adapter->attachment, undef;
+    $adapter->attachment( 'genome.jpg' );
+    is $adapter->attachment, 'genome.jpg';
+    is_deeply \%adaptee, { -attachment => 'genome.jpg' };
+};
+
+subtest 'field_names()' => sub {
+    %adaptee = ( -type => undef );
+    my @got = $adapter->field_names;
+    my @expected = ( 'Content-Type' );
+    is_deeply \@got, \@expected;
+
+    %adaptee = (
+        -nph        => 'foo',
+        -charset    => 'foo',
+        -status     => 'foo',
+        -target     => 'foo',
+        -p3p        => 'foo',
+        -cookie     => 'foo',
+        -expires    => 'foo',
+        -attachment => 'foo',
+        -foo_bar    => 'foo',
+        -foo        => q{},
+        -bar        => q{},
+        -baz        => q{},
+        -qux        => q{},
+    );
+
+    @got = $adapter->field_names;
+
+    @expected = qw(
+        Status
+        Window-Target
+        P3P
+        Set-Cookie
+        Expires
+        Date
+        Content-Disposition
+        Foo-bar
+        Content-Type
+    );
+
+    is_deeply \@got, \@expected;
+};

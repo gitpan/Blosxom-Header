@@ -7,13 +7,15 @@ use Test::More tests => 5;
     our $header = {};
 }
 
-ok( !Blosxom::Header->has_instance, 'no Blosxom::Header instance yet' );
+my $class = 'Blosxom::Header';
 
-my $h1 = Blosxom::Header->instance;
-ok( $h1, 'created Blosxom::Header instance 1' );
+ok !$class->has_instance, "no $class instance yet";
 
-my $h2 = Blosxom::Header->instance;
-ok( $h2, 'created Blosxom::Header instance 2' );
+my $h1 = $class->instance;
+ok $h1, "created $class instance 1";
 
-is( $h1, $h2, 'both instances are the same object' );
-is( Blosxom::Header->has_instance, $h1, 'Blosxom::Header has instance' );
+my $h2 = $class->instance;
+ok $h2, "created $class instance 2";
+
+ok $h1 eq $h2, 'both instances are the same object';
+ok $class->has_instance eq $h1, "$class has instance";

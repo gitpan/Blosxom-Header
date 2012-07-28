@@ -1,20 +1,25 @@
 use strict;
 use warnings;
-use Benchmark qw/timethese cmpthese/;
-use CGI::Util qw/expires/;
+use Benchmark qw/cmpthese/;
+use CGI::Util;
 
-my %cache;
-my $expires = sub {
+my %expires_ref;
+my $expires_ref = sub {
     my $time = shift;
-    $cache{ $time } ||= expires( $time );
+    $expires_ref{ $time } ||= CGI::Util::expires( $time );
 };
 
-sub baz { $expires->( @_ ) }
+my %expires;
+sub expires {
+    my $time = shift;
+    $expires{ $time } ||= CGI::Util::expires( $time );
+}
 
-my $result = timethese(10000, {
-    foo => sub { expires( '+3M' ) },
-    bar => sub { $expires->( '+3M' ) },
-    baz => sub { baz( '+3M' ) },
+my $now = time;
+
+cmpthese(1000000, {
+    'CGI::Util::expires()'      => sub { CGI::Util::expires( $now ) },
+    '$expires_ref->() (cached)' => sub { $expires_ref->( $now )     },
+    'expires() (cached)'        => sub { expires( $now )            },
 });
 
-cmpthese( $result );

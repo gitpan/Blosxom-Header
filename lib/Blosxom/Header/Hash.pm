@@ -12,68 +12,60 @@ my %adapter_of;
 my %iterator_of; # deprecated
 
 sub new {
-    my ( $class, $header ) = @_;
-    my $self = bless \do { my $anon_scalar }, $class;
-    my $adapter = tie my %header => 'Blosxom::Header::Adapter' => $header;
-    my $id = refaddr( $self );
-    $header_of{$id} = \%header;
-    $adapter_of{$id} = $adapter;
-    $iterator_of{$id} = {};
-    $self;
-}
+    my $self   = bless \do { my $anon_scalar }, shift;
+    my $header = shift;
+    my $id     = refaddr $self;
 
-# delegation
-for my $method (qw/push_p3p_tags p3p_tags attachment nph field_names/) {
-    my $code = sub {
-        my $self = shift;
-        my $id = refaddr( $self );
-        $adapter_of{$id}->$method( @_ );
-    };
-    no strict 'refs';
-    *$method = $code;
+    my $adapter = tie my %header, 'Blosxom::Header::Adapter', $header;
+
+    $adapter_of{$id}  = $adapter;
+    $header_of{$id}   = \%header;
+    $iterator_of{$id} = {};
+
+    $self;
 }
 
 sub as_hashref {
     my $self = shift;
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     $header_of{ $id };
 }
 
 sub get {
     my ( $self, @fields ) = @_;
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     @{ $header_of{$id} }{ @fields };
 }
 
 sub set {
     my ( $self, %header ) = @_;
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     @{ $header_of{$id} }{ keys %header } = values %header; # merge!
     return;
 }
 
 sub delete {
     my ( $self, @fields ) = @_;
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     delete @{ $header_of{$id} }{ @fields };
 }
 
 sub exists {
     my ( $self, $field ) = @_;
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     exists $header_of{$id}->{$field};
 }
 
 sub clear {
     my $self = shift; 
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     %{ $header_of{$id} } = ();
 }
 
 sub each {
     my $self     = shift;
     my $callback = shift;
-    my $id       = refaddr( $self );
+    my $id       = refaddr $self;
 
     if ( ref $callback eq 'CODE' ) {
         for my $field ( $adapter_of{$id}->field_names ) {
@@ -93,7 +85,7 @@ sub each {
 # This method is deprecated and will be remove in 0.06
 sub _each {
     my $self = shift;
-    my $id   = refaddr( $self );
+    my $id   = refaddr $self;
     my $iter = $iterator_of{$id};
 
     if ( !%{ $iter } or $iter->{is_exhausted} ) {
@@ -107,7 +99,7 @@ sub _each {
     }
 
     if ( $iter->{current} < $iter->{size} ) {
-        my $field = $iter->{collection}[ $iter->{current}++ ];
+        my $field = $iter->{collection}->[ $iter->{current}++ ];
         return wantarray ? ( $field, $header_of{$id}->{$field} ) : $field;
     }
     else {
@@ -119,19 +111,19 @@ sub _each {
 
 sub is_empty {
     my $self = shift;
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     not %{ $header_of{$id} };
 }
 
 sub flatten {
     my $self = shift;
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     map { $_, $header_of{$id}->{$_} } $adapter_of{$id}->field_names;
 }
 
 sub expires {
     my $self = shift;
-    my $id   = refaddr( $self );
+    my $id   = refaddr $self;
 
     if ( @_ ) {
         $header_of{$id}->{Expires} = shift;
@@ -143,9 +135,15 @@ sub expires {
     return;
 }
 
+sub field_names   { $adapter_of{ refaddr shift }->field_names         }
+sub attachment    { $adapter_of{ refaddr shift }->attachment( @_ )    }
+sub nph           { $adapter_of{ refaddr shift }->nph( @_ )           }
+sub p3p_tags      { $adapter_of{ refaddr shift }->p3p_tags( @_ )      }
+sub push_p3p_tags { $adapter_of{ refaddr shift }->push_p3p_tags( @_ ) }
+
 sub DESTROY {
     my $self = shift;
-    my $id = refaddr( $self );
+    my $id = refaddr $self;
     delete $header_of{$id};
     delete $adapter_of{$id};
     delete $iterator_of{$id};

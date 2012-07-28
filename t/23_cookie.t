@@ -10,7 +10,7 @@ my %header;
     our $header = \%header;
 }
 
-my $header = Blosxom::Header->instance;
+my $header = Blosxom::Header->new;
 
 # set_cookie()
 

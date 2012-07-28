@@ -17,10 +17,11 @@ use Blosxom::Header;
         -expires    => '+3M',
         -nph        => 1,
         -status     => '304 Not Modified',
+        -cookie     => 'ID=123456; path=/',
     };
 }
 
-my $header = Blosxom::Header->instance;
+my $header = Blosxom::Header->new;
 $header->last_modified( time );
 
 cmpthese(100000, {
@@ -32,6 +33,7 @@ cmpthese(100000, {
     'Bar'                 => sub { my $v = $header->{Bar}                 },
     'Date'                => sub { my $v = $header->{Date}                },
     'Expires'             => sub { my $v = $header->{Expires}             },
+    'Set-Cookie'          => sub { my $v = $header->{Set_Cookie}          },
 });
 
 cmpthese(300000, {

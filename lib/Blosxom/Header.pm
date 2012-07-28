@@ -7,7 +7,7 @@ use Blosxom::Header::Util qw/time2str str2time/;
 use Carp qw/croak carp/;
 use Exporter 'import';
 
-our $VERSION = '0.05010';
+our $VERSION = '0.05012';
 
 our @EXPORT_OK = qw(
     header_get  header_set  header_exists header_delete header_iter
@@ -199,7 +199,7 @@ sub push_p3p {
     my $self = ref $_[0] ? shift : __PACKAGE__->instance;
     $self->push_p3p_tags( @_ );
 }
-*p3p = \&p3p_tags;
+sub p3p { shift->p3p_tags( @_ ) }
 
 1;
 
@@ -385,8 +385,9 @@ syntax.
   my $value = $header->as_hashref->{Foo};
   my $deleted = delete $header->as_hashref->{Foo};
 
-The hash dereference operator of C<$header> is L<overload>ed with C<as_hashref()>
-and so you can omit calling C<as_hashref()> method:
+Since the hash dereference operator of C<$header> is L<overload>ed
+with C<as_hashref()>,
+you can omit calling C<as_hashref()> method from the above operation:
 
   $header->{Foo} = 'bar';
   my $value = $header->{Foo};
@@ -727,7 +728,7 @@ The subroutine outputs the P3P header in the following format:
 
   P3P: policyref="/w3c/p3p.xml" CP="%s"
 
-therefore the following code doesn't work correctly:
+therefore the following code doesn't work as you expect:
 
   # wrong
   $header->set( P3P => q{policyref="/path/to/p3p.xml"} );

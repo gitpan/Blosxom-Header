@@ -1,6 +1,6 @@
 use strict;
 use Blosxom::Header::Adapter;
-use Test::More tests => 16;
+use Test::More tests => 17;
 
 my %adaptee;
 my $adapter = tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
@@ -11,6 +11,7 @@ is $adapter{P3P}, 'policyref="/w3c/p3p.xml" CP="CAO DSP LAW CURa"';
 %adaptee = ();
 $adapter->p3p_tags( 'CAO' );
 is_deeply \%adaptee, { -p3p => 'CAO' };
+is delete $adapter{P3P}, 'policyref="/w3c/p3p.xml" CP="CAO"';
 
 %adaptee = ();
 $adapter->p3p_tags( 'CAO DSP LAW CURa' );

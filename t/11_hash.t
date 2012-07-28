@@ -1,5 +1,5 @@
 use strict;
-use Test::More tests => 19;
+use Test::More tests => 15;
 use Test::Warn;
 
 BEGIN {
@@ -32,21 +32,26 @@ is_deeply \@got, \@expected;
 $header->clear;
 is_deeply \%header, { -type => q{} }, 'should be empty';
 
-# set()
-%header = ();
-warning_is { $header->set( 'Foo' ) }
-    'Odd number of elements in hash assignment';
-$header->set(
-    Foo => 'bar',
-    Bar => 'baz',
-    Baz => 'qux',
-);
-my %expected = (
-    -foo => 'bar',
-    -bar => 'baz',
-    -baz => 'qux',
-);
-is_deeply \%header, \%expected, 'set() multiple elements';
+subtest 'set()' => sub {
+    %header = ();
+
+    my $expected = 'Odd number of elements in hash assignment';
+    warning_is { $header->set( 'Foo' ) } $expected;
+
+    $header->set(
+        Foo => 'bar',
+        Bar => 'baz',
+        Baz => 'qux',
+    );
+
+    my %expected = (
+        -foo => 'bar',
+        -bar => 'baz',
+        -baz => 'qux',
+    );
+
+    is_deeply \%header, \%expected, 'set() multiple elements';
+};
 
 subtest 'delete()' => sub {
     %header = (
@@ -72,56 +77,6 @@ subtest 'expires()' => sub {
     $header->expires( 'Sat, 07 Jul 2012 05:05:10 GMT' );
     is $header->expires, $now, 'get expires()';
     is $header{-expires}, 'Sat, 07 Jul 2012 05:05:10 GMT';
-};
-
-subtest 'field_names()' => sub {
-    %header = (
-        -nph        => 'foo',
-        -charset    => 'foo',
-        -status     => 'foo',
-        -target     => 'foo',
-        -p3p        => 'foo',
-        -cookie     => 'foo',
-        -expires    => 'foo',
-        -attachment => 'foo',
-        -foo_bar    => 'foo',
-        -foo        => q{},
-        -bar        => q{},
-        -baz        => q{},
-        -qux        => q{},
-    );
-
-    my @got = sort $header->field_names;
-
-    my @expected = qw(
-        Content-Disposition
-        Content-Type
-        Date
-        Expires
-        Foo-bar
-        P3P
-        Set-Cookie
-        Status
-        Window-Target
-    );
-
-    is_deeply \@got, \@expected;
-};
-
-subtest 'nph()' => sub {
-    %header = ();
-    ok !$header->nph;
-    $header->nph( 1 );
-    ok $header->nph;
-    is_deeply \%header, { -nph => 1 };
-};
-
-subtest 'attachment()' => sub {
-    %header = ();
-    is $header->attachment, undef;
-    $header->attachment( 'genome.jpg' );
-    is $header->attachment, 'genome.jpg';
-    is_deeply \%header, { -attachment => 'genome.jpg' };
 };
 
 subtest 'each()' => sub {
