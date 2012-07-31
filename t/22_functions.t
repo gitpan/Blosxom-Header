@@ -1,11 +1,11 @@
 use strict;
 use Test::Exception;
-use Test::More tests => 12;
+use Test::More tests => 10;
 
 BEGIN {
     my @functions = qw(
         header_get    header_set  header_exists
-        header_delete push_p3p header_iter
+        header_delete header_iter
     );
     use_ok 'Blosxom::Header', @functions;
     can_ok __PACKAGE__, @functions;
@@ -30,14 +30,11 @@ is_deeply \%header, { -status => '304 Not Modified' };
 is header_delete( 'Status' ), '304 Not Modified';
 is_deeply \%header, {};
 
-is push_p3p( 'CAO' ), 1;
-is $header{-p3p}, 'CAO';
-
 my @got;
 header_iter sub {
     my $field = shift;
     push @got, $field;
 };
 
-is_deeply \@got, [qw/P3P Content-Type/];
+is_deeply \@got, [ 'Content-Type' ];
 

@@ -1,5 +1,7 @@
 ---
 abstract: 'Object representing CGI response headers'
+author:
+  - 'Ryo Anazawa (anazawa@cpan.org)'
 build_requires:
   ExtUtils::MakeMaker: 6.59
   Test::Base: 0.60
@@ -33,9 +35,8 @@ requires:
   List::Util: 1.19
   Scalar::Util: 1.19
   overload: 1.06
-  parent: 0.225
   perl: 5.8.9
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/anazawa/p5-Blosxom-Header
-version: 0.05012
+version: 0.06000

@@ -9,9 +9,6 @@ inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
 lib/Blosxom/Header.ja.pod
 lib/Blosxom/Header.pm
-lib/Blosxom/Header/Adapter.pm
-lib/Blosxom/Header/Hash.pm
-lib/Blosxom/Header/Util.pm
 Makefile.PL
 MANIFEST			This list of files
 META.yml
@@ -24,21 +21,26 @@ t/10_adapter/13_content_disposition.t
 t/10_adapter/14_date.t
 t/10_adapter/15_p3p.t
 t/10_adapter/denormalization.t
-t/11_hash.t
 t/20_singleton.t
 t/21_instance.t
 t/22_functions.t
 t/23_cookie.t
 t/30_plugins.t
+t/basic.t
+t/derivative.t
 t/plugins/bar
 t/plugins/baz
 t/plugins/foo
 tools/benchmark/basic.pl
 tools/benchmark/delete.pl
 tools/benchmark/denormalize.pl
+tools/benchmark/exists.pl
 tools/benchmark/expires.pl
 tools/benchmark/field_names.pl
 tools/benchmark/get.pl
 tools/benchmark/get_cookie.pl
+tools/benchmark/set.pl
+tools/benchmark/set_cookie.pl
+tools/benchmark/time2str.pl
 tools/profile.pl
 xt/pod.t

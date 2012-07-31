@@ -1,14 +1,14 @@
 use strict;
-use Blosxom::Header::Adapter;
+use Blosxom::Header;
 use Test::Base;
 
 plan tests => 1 * blocks();
 
-my $adapter = Blosxom::Header::Adapter->TIEHASH;
+my $header = 'Blosxom::Header';
 
 run {
     my $block = shift;
-    is $adapter->normalize( $block->input ), $block->expected;
+    is $header->_normalize( $block->input ), $block->expected;
 };
 
 __DATA__

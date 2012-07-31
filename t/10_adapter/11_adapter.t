@@ -1,15 +1,15 @@
 use strict;
 use warnings;
-use Blosxom::Header::Adapter;
+use Blosxom::Header;
 use Test::More tests => 16;
 
 my %adaptee;
-my $adapter = tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
-ok $adapter->isa( 'Blosxom::Header::Adapter' );
+my $adapter = tie my %adapter, 'Blosxom::Header', \%adaptee;
+ok $adapter->isa( 'Blosxom::Header' );
 can_ok $adapter, qw(
     FETCH STORE DELETE EXISTS CLEAR SCALAR
-    normalize denormalize
-    date_header_is_fixed field_names
+    _normalize _denormalize
+    _date_header_is_fixed field_names
     push_p3p_tags p3p_tags expires nph attachment
 );
 

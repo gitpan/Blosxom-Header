@@ -1,16 +1,22 @@
 use strict;
 use Test::More tests => 15;
 use Test::Warn;
+use Test::Exception;
 
 BEGIN {
-    my $class = 'Blosxom::Header::Hash';
+    my $class = 'Blosxom::Header';
     use_ok $class;
     ok $class->can( 'new' );
 }
 
 my %header;
-my $header = Blosxom::Header::Hash->new( \%header );
-ok $header->isa( 'Blosxom::Header::Hash' );
+{
+    package blosxom;
+    our $header = \%header;
+}
+
+my $header = Blosxom::Header->new;
+ok $header->isa( 'Blosxom::Header' );
 can_ok $header, qw(
     get set exists delete flatten is_empty clear each as_hashref
     field_names push_p3p_tags p3p_tags attachment nph expires
@@ -35,7 +41,7 @@ is_deeply \%header, { -type => q{} }, 'should be empty';
 subtest 'set()' => sub {
     %header = ();
 
-    my $expected = 'Odd number of elements in hash assignment';
+    my $expected = 'Odd number of elements passed to set()';
     warning_is { $header->set( 'Foo' ) } $expected;
 
     $header->set(
@@ -88,13 +94,6 @@ subtest 'each()' => sub {
         'Content-Type' => 'text/html; charset=ISO-8859-1',
     );
     is_deeply \@got, \@expected;
-
-    # DEPRECATED
-    %header = ( -foo => 'bar' );
-    while ( my $field = $header->each ) {
-        $header->delete( $field );
-    }
-    is_deeply \%header, { -type => q{} };
 };
 
 subtest 'is_empty()' => sub {
@@ -123,11 +122,13 @@ subtest 'as_hashref()' => sub {
     my $got = $header->as_hashref;
     ok ref $got eq 'HASH';
 
-    ok my $adapter = tied( %{ $got } );
-    ok $adapter->isa( 'Blosxom::Header::Adapter' );
-    ok tied( %{ $header } ) eq $adapter;
+    ok my $tied = tied( %{ $got } );
+    ok $tied eq $header;
 
     %header = ();
     $header->{Foo} = 'bar';
-    is_deeply \%header, { -foo => 'bar' };
+    is_deeply \%header, { -foo => 'bar' }, 'overload';
+
+    untie %{ $header->as_hashref };
+    ok !$header->as_hashref, 'untie';
 };

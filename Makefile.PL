@@ -5,7 +5,6 @@ all_from 'lib/Blosxom/Header.pm';
 repository 'https://github.com/anazawa/p5-Blosxom-Header';
 
 requires 'overload'     => '1.06';
-requires 'parent'       => '0.225';
 requires 'Carp'         => '1.10';
 requires 'CGI::Util'    => '3.53';
 requires 'CGI::Cookie'  => '1.30';

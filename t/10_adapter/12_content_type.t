@@ -1,10 +1,10 @@
 use strict;
 use warnings;
-use Blosxom::Header::Adapter;
+use Blosxom::Header;
 use Test::More tests => 27;
 
 my %adaptee;
-tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
+tie my %adapter, 'Blosxom::Header', \%adaptee;
 
 %adaptee = ( -type => q{} );
 is $adapter{Content_Type}, undef;

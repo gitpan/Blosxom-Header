@@ -1,6 +1,6 @@
 use strict;
 use Blosxom::Header;
-use Test::More tests => 12;
+use Test::More tests => 9;
 use Test::Warn;
 use Test::Exception;
 
@@ -30,9 +30,6 @@ can_ok $header, qw(
     set_cookie get_cookie
 );
 
-# obsolete methods
-can_ok $header, qw( cookie push_cookie p3p push_p3p );
-
 subtest 'date()' => sub {
     %header = ();
     is $header->date, undef;
@@ -51,28 +48,6 @@ subtest 'last_modified()' => sub {
     $header->last_modified( $now );
     is $header->last_modified, $now;
     is $header{-last_modified}, 'Sat, 07 Jul 2012 05:05:09 GMT';
-};
-
-# OBSOLETE
-subtest 'push_cookie()' => sub {
-    %header = ();
-
-    my $expected = 'Useless use of _push() with no values';
-    warning_is { $header->push_cookie } $expected;
-
-    is $header->push_cookie( 'foo' ), 1, '_push()';
-    is $header{-cookie}, 'foo';
-
-    is $header->push_cookie( 'bar' ), 2, '_push()';
-    is_deeply $header{-cookie}, [ 'foo', 'bar' ];
-
-    is $header->push_cookie( 'baz' ), 3, '_push()';
-    is_deeply $header{-cookie}, [ 'foo', 'bar', 'baz' ];
-
-    %header = ();
-    $header->push_cookie({ -name => 'ID', -value => 123456 });
-    my $got = $header->cookie;
-    isa_ok $got, 'CGI::Cookie';
 };
 
 subtest 'status()' => sub {
@@ -101,11 +76,20 @@ subtest 'charset()' => sub {
     %header = ( -type => 'text/html; charset=iso-8859-1; Foo=1' );
     is $header->charset, 'ISO-8859-1';
 
-    SKIP: {
-        skip 'not supported yet', 1;
-        %header = ( -type => 'text/html; charset="iso-8859-1"; Foo=1' );
-        is $header->charset, 'ISO-8859-1';
-    }
+    %header = ( -type => 'text/html; charset="iso-8859-1"; Foo=1' );
+    is $header->charset, 'ISO-8859-1';
+
+    %header = ( -type => 'text/html; charset = "iso-8859-1"; Foo=1' );
+    is $header->charset, 'ISO-8859-1';
+
+    %header = ( -type => 'text/html;\r\n charset = "iso-8859-1"; Foo=1' );
+    is $header->charset, 'ISO-8859-1';
+
+    %header = ( -type => 'text/html;\r\n charset = iso-8859-1 ; Foo=1' );
+    is $header->charset, 'ISO-8859-1';
+
+    %header = ( -type => 'text/html;\r\n charset = iso-8859-1 ' );
+    is $header->charset, 'ISO-8859-1';
 };
 
 subtest 'content_type()' => sub {
@@ -151,28 +135,6 @@ subtest 'content_type()' => sub {
 
     %header = ( -type => q{} );
     is $header->content_type, q{};
-};
-
-# OBSOLETE
-subtest 'cookie()' => sub {
-    %header = ();
-    $header->cookie( 'foo' );
-    is_deeply \%header, { -cookie => 'foo' };
-
-    %header = ();
-    $header->cookie( 'foo', 'bar' );
-    is_deeply \%header, { -cookie => [qw/foo bar/] };
-
-    %header = ( -cookie => [qw/foo bar/] );
-    is $header->cookie, 'foo';
-    my @got = $header->cookie;
-    my @expected = qw( foo bar );
-    is_deeply \@got, \@expected;
-
-    %header = ();
-    $header->cookie({ -name => 'ID', -value => 123456 });
-    my $got = $header->cookie;
-    isa_ok $got, 'CGI::Cookie';
 };
 
 subtest 'target()' => sub {
