@@ -1,7 +1,7 @@
 use strict;
 use Blosxom::Header;
 use HTTP::Date;
-use Test::More tests => 21;
+use Test::More tests => 23;
 use Test::Warn;
 
 my %adaptee;
@@ -54,3 +54,23 @@ is_deeply \%adaptee, { -expires => '+3M' };
 %adaptee = ( -date => 'Sat, 07 Jul 2012 05:05:09 GMT' );
 $adapter{Set_Cookie} = 'ID=123456; path=/';
 is_deeply \%adaptee, { -cookie => 'ID=123456; path=/' };
+
+subtest 'date()' => sub {
+    %adaptee = ();
+    is $adapter->date, undef;
+
+    my $now = 1341637509;
+    $adapter->date( $now );
+    is $adapter->date, $now;
+    is $adaptee{-date}, 'Sat, 07 Jul 2012 05:05:09 GMT';
+};
+
+subtest 'last_modified()' => sub {
+    %adaptee = ();
+    is $adapter->last_modified, undef;
+
+    my $now = 1341637509;
+    $adapter->last_modified( $now );
+    is $adapter->last_modified, $now;
+    is $adaptee{-last_modified}, 'Sat, 07 Jul 2012 05:05:09 GMT';
+};

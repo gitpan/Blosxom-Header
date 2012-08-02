@@ -1,16 +1,22 @@
 use strict;
 use warnings;
 use Blosxom::Header;
-use Test::More tests => 16;
+use Test::More tests => 18;
+use Test::Warn;
 
 my %adaptee;
 my $adapter = tie my %adapter, 'Blosxom::Header', \%adaptee;
 ok $adapter->isa( 'Blosxom::Header' );
 can_ok $adapter, qw(
-    FETCH STORE DELETE EXISTS CLEAR SCALAR
+    FETCH STORE DELETE EXISTS CLEAR SCALAR UNTIE DESTROY
     _normalize _denormalize
-    _date_header_is_fixed field_names
-    push_p3p_tags p3p_tags expires nph attachment
+    _date_header_is_fixed
+    field_names
+    push_p3p_tags p3p_tags
+    nph attachment status target
+    set_cookie get_cookie
+    date last_modified expires
+    content_type type charset
 );
 
 # SCALAR
@@ -98,4 +104,22 @@ subtest 'field_names()' => sub {
     );
 
     is_deeply \@got, \@expected;
+};
+
+subtest 'status()' => sub {
+    %adaptee = ();
+    is $adapter->status, undef;
+    $adapter->status( 304 );
+    is $adaptee{-status}, '304 Not Modified';
+    is $adapter->status, '304';
+    my $expected = 'Unknown status code "999" passed to status()';
+    warning_is { $adapter->status( 999 ) } $expected;
+};
+
+subtest 'target()' => sub {
+    %adaptee = ();
+    is $adapter->target, undef;
+    $adapter->target( 'ResultsWindow' );
+    is $adapter->target, 'ResultsWindow';
+    is_deeply \%adaptee, { -target => 'ResultsWindow' };
 };

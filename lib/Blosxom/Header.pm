@@ -13,7 +13,7 @@ BEGIN {
     *new   = \&instance; *type   = \&content_type;
 }
 
-our $VERSION = '0.06000';
+our $VERSION = '0.06001';
 
 our @EXPORT_OK = qw(
     header_get    header_set  header_exists
@@ -34,7 +34,7 @@ my $instance;
 sub instance {
     my $class = shift;
 
-    return $class if ref $class;
+    return $class    if ref $class;
     return $instance if defined $instance;
 
     if ( $class->is_initialized ) {
@@ -143,6 +143,7 @@ sub content_type {
     }
     elsif ( my $content_type = $self->FETCH( 'Content-Type' ) ) {
         my ( $media_type, $rest ) = split /;\s*/, $content_type, 2;
+        $media_type =~ s/\s+//g;
         return wantarray ? ( lc $media_type, $rest ) : lc $media_type;
     }
     else {
@@ -199,7 +200,7 @@ sub FETCH {
     elsif ( $norm eq '-p3p' ) {
         if ( my $p3p = $header->{-p3p} ) {
             my $tags = ref $p3p eq 'ARRAY' ? join ' ', @{ $p3p } : $p3p;
-            return qq{policyref="/w3c/p3p.xml" CP="$tags"};
+            return qq{policyref="/w3c/p3p.xml", CP="$tags"};
         }
         else {
             return;
@@ -219,7 +220,7 @@ sub STORE {
         return carp( 'The Date header is fixed' );
     }
     elsif ( $norm eq '-content_type' ) {
-        if ( $value =~ /\bcharset\b/ ) {
+        if ( $value =~ s/\b(charset)\b/\L$1/i ) {
             delete $header->{-charset};
         } else {
             $header->{-charset} = q{};
@@ -441,16 +442,20 @@ sub p3p_tags {
 sub push_p3p_tags {
     my ( $self, @tags ) = @_;
 
-    my $header = $adaptee_of{ refaddr $self };
+    if ( @tags ) {
+        my $header = $adaptee_of{ refaddr $self };
 
-    if ( my $tags = $header->{-p3p} ) {
-        return push @{ $tags }, @tags if ref $tags eq 'ARRAY';
-        unshift @tags, $tags;
+        if ( my $tags = $header->{-p3p} ) {
+            return push @{ $tags }, @tags if ref $tags eq 'ARRAY';
+            unshift @tags, $tags;
+        }
+
+        $header->{-p3p} = @tags > 1 ? \@tags : $tags[0];
+
+        return scalar @tags;
     }
 
-    $header->{-p3p} = @tags > 1 ? \@tags : $tags[0];
-
-    scalar @tags;
+    return;
 }
 
 sub set_cookie {
@@ -601,12 +606,27 @@ Blosxom::Header - Object representing CGI response headers
 
   my $header = Blosxom::Header->instance;
 
-  my $status = $header->get( 'Status' ); # 304 Not Modified
+  $header->set( Content_Length => 12345 );
+  my $value   = $header->get( 'Status' );
+  my $deleted = $header->delete( 'Content-Disposition' );
+  my $bool    = $header->exists( 'ETag' );
 
-  $header->set(
-      Content_Length => 12345,
-      Last_Modified  => 'Wed, 23 Sep 2009 13:36:33 GMT',
+  # as a hash reference
+  $header->{Content_Length} = 12345;
+  my $value   = $header->{Status};
+  my $deleted = delete $header->{Content_Disposition};
+  my $bool    = exists $header->{ETag};
+
+  # procedural interface
+  use Blosxom::Header qw(
+      header_get    header_set
+      header_exists header_delete
   );
+
+  header_set( Content_Length => 12345 );
+  my $value   = header_get( 'Status' );
+  my $deleted = header_delete( 'Content-Disposition' );
+  my $bool    = header_exists( 'ETag' );
 
 =head1 DESCRIPTION
 
@@ -624,8 +644,17 @@ Blosxom plugins may modify C<$header> directly because the variable is
 global.
 The problem is that there is no agreement with how to normalize C<keys>
 of C<$header>.
-This module standardizes this process and also provides some convenience
-methods.
+If we normalized them, plugins would be compatible with each other.
+
+In addition, C<CGI::header()> doesn't behave intuitively.
+It's difficult for us to predict what the subroutine will return
+unless we execute it.
+Although CGI's pod tells us how it will work,
+it's painful for lazy people to reread the document
+whenever they manipulate CGI response headers.
+It lowers their productivity.
+While it's easy to replace CGI.pm with other modules,
+this module extends Blosxom without rewriting C<blosxom.cgi>.
 
 =head2 CLASS METHODS
 
@@ -754,20 +783,21 @@ Returns pairs of fields and values.
 =item $hashref = $header->as_hashref
 
 Returns a reference to hash which represents header fields.
-You can C<set()>, C<get()> and C<delete()> header fields using the hash
-syntax.
+You can manipulate header fields using the hash syntax.
 
   $header->as_hashref->{Foo} = 'bar';
-  my $value = $header->as_hashref->{Foo};
+  my $value   = $header->as_hashref->{Foo};
   my $deleted = delete $header->as_hashref->{Foo};
+  my $bool    = exists $header->as_hashref->{Foo};
 
 Since the hash dereference operator of C<$header> is L<overload>ed
 with C<as_hashref()>,
 you can omit calling C<as_hashref()> method from the above operations:
 
   $header->{Foo} = 'bar';
-  my $value = $header->{Foo};
+  my $value   = $header->{Foo};
   my $deleted = delete $header->{Foo};
+  my $bool    = exists $header->{Foo};
 
 NOTE: You can't iterate over C<$header> using C<CORE::each()>, C<CORE::keys()>
 or C<CORE::values()>. Use C<< $header->field_names >> or C<< $header->each >>
@@ -945,7 +975,7 @@ The parameter can be an array or a space-delimited string.
 
 In this case, the outgoing header will be formatted as:
 
-  P3P: policyref="/w3c/p3p.xml" CP="CAO DSP LAW CURa"
+  P3P: policyref="/w3c/p3p.xml", CP="CAO DSP LAW CURa"
 
 =item $header->push_p3p_tags( @tags )
 
@@ -1049,7 +1079,7 @@ Since C<CGI::header()> restricts where the policy-reference file is located,
 you can't modify the location (C</w3c/p3p.xml>).
 The subroutine outputs the P3P header in the following format:
 
-  P3P: policyref="/w3c/p3p.xml" CP="%s"
+  P3P: policyref="/w3c/p3p.xml", CP="%s"
 
 therefore the following code doesn't work as you expect:
 

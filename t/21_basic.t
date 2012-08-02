@@ -1,25 +1,32 @@
 use strict;
-use Test::More tests => 15;
+use Blosxom::Header;
+use Test::More tests => 14;
 use Test::Warn;
 use Test::Exception;
 
-BEGIN {
-    my $class = 'Blosxom::Header';
-    use_ok $class;
-    ok $class->can( 'new' );
-}
-
-my %header;
 {
     package blosxom;
-    our $header = \%header;
+    our $header;
 }
+
+{
+    my $expected = qr{^\$blosxom::header hasn't been initialized yet};
+    throws_ok { Blosxom::Header->new } $expected;
+}
+
+# initialize
+my %header;
+$blosxom::header = \%header;
 
 my $header = Blosxom::Header->new;
 ok $header->isa( 'Blosxom::Header' );
 can_ok $header, qw(
-    get set exists delete flatten is_empty clear each as_hashref
-    field_names push_p3p_tags p3p_tags attachment nph expires
+    clear delete exists field_names get set
+    as_hashref is_empty flatten
+    content_type type charset
+    p3p_tags push_p3p_tags 
+    last_modified date expires
+    attachment charset nph status target
 );
 
 # exists()
@@ -68,6 +75,14 @@ subtest 'delete()' => sub {
     my @deleted = $header->delete( qw/foo bar/ );
     is_deeply \@deleted, [ 'bar', 'baz' ], 'delete() multiple elements';
     is_deeply \%header, { -baz => 'qux' };
+
+    %header = (
+        -foo => 'bar',
+        -bar => 'baz',
+        -baz => 'qux',
+    );
+    is $header->delete(qw/foo bar baz/), 'qux';
+    is_deeply \%header, {};
 };
 
 subtest 'expires()' => sub {
@@ -112,7 +127,7 @@ subtest 'flatten()' => sub {
     %header = ( -p3p => [ 'foo', 'bar' ] );
     @got = $header->flatten;
     @expected = (
-        'P3P',          'policyref="/w3c/p3p.xml" CP="foo bar"',
+        'P3P',          'policyref="/w3c/p3p.xml", CP="foo bar"',
         'Content-Type', 'text/html; charset=ISO-8859-1',
     );
     is_deeply \@got, \@expected;
@@ -132,3 +147,4 @@ subtest 'as_hashref()' => sub {
     untie %{ $header->as_hashref };
     ok !$header->as_hashref, 'untie';
 };
+

@@ -3,13 +3,16 @@ use Test::Exception;
 use Test::More tests => 10;
 
 BEGIN {
-    my @functions = qw(
+    use_ok 'Blosxom::Header', qw(
         header_get    header_set  header_exists
         header_delete header_iter
     );
-    use_ok 'Blosxom::Header', @functions;
-    can_ok __PACKAGE__, @functions;
 }
+
+can_ok __PACKAGE__, qw(
+    header_get    header_set  header_exists
+    header_delete header_iter
+);
 
 my %header;
 
@@ -31,10 +34,5 @@ is header_delete( 'Status' ), '304 Not Modified';
 is_deeply \%header, {};
 
 my @got;
-header_iter sub {
-    my $field = shift;
-    push @got, $field;
-};
-
-is_deeply \@got, [ 'Content-Type' ];
-
+header_iter(sub { push @got, @_ });
+is_deeply \@got, [ 'Content-Type', 'text/html; charset=ISO-8859-1' ];
