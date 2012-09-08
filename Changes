@@ -1,10 +1,13 @@
 Revision history for Perl extension Blosxom::Header.
 
-0.06001 Aug, 2nd
+0.06002 Aug 9th, 2012
+  - Use HTTP::Headers::Util to parse the Content-Type header
+
+0.06001 Aug 2nd, 2012
   - Corrected typo:
       P3P: policyref="/w3c/p3p.xml", CP="%s" (comma was missing)
 
-0.06000 Jul, 31st
+0.06000 Jul 31st, 2012
   - charset() parse a quoted string
       $header->set( Content_Type => 'text/plain; charset="utf-8"' );
       my $charset = $header->charset; # UTF-8

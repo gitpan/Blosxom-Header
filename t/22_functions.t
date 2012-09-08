@@ -15,11 +15,7 @@ can_ok __PACKAGE__, qw(
 );
 
 my %header;
-
-{
-    package blosxom;
-    our $header = \%header;
-}
+$blosxom::header = \%header;
 
 is header_get( 'Content-Type' ), 'text/html; charset=ISO-8859-1';
 is header_get( 'Status' ), undef;

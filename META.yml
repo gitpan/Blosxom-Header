@@ -32,6 +32,7 @@ requires:
   Carp: 1.10
   Exporter: 5.63
   HTTP::Date: 6.02
+  HTTP::Headers::Util: 6.03
   HTTP::Status: 6.03
   List::Util: 1.19
   Scalar::Util: 1.19
@@ -40,4 +41,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: https://github.com/anazawa/p5-Blosxom-Header
-version: 0.06001
+version: 0.06002

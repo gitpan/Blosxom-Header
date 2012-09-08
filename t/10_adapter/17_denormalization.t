@@ -4,11 +4,11 @@ use Test::Base;
 
 plan tests => 1 * blocks();
 
-my $adapter = Blosxom::Header->TIEHASH;
+my $header = 'Blosxom::Header';
 
 run {
     my $block = shift;
-    is $adapter->_denormalize( $block->input ), $block->expected;
+    is $header->_denormalize( $block->input ), $block->expected;
 };
 
 __DATA__

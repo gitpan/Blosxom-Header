@@ -1,18 +1,13 @@
 use strict;
 use Blosxom::Header;
-use Test::More tests => 14;
+use Test::More tests => 13;
 use Test::Warn;
 use Test::Exception;
 
-{
-    package blosxom;
-    our $header;
-}
-
-{
+subtest 'instance() throws an execption' => sub {
     my $expected = qr{^\$blosxom::header hasn't been initialized yet};
     throws_ok { Blosxom::Header->new } $expected;
-}
+};
 
 # initialize
 my %header;
@@ -85,21 +80,6 @@ subtest 'delete()' => sub {
     is_deeply \%header, {};
 };
 
-subtest 'expires()' => sub {
-    %header = ();
-    is $header->expires, undef;
-
-    my $now = 1341637509;
-    $header->expires( $now );
-    is $header->expires, $now, 'get expires()';
-    is $header{-expires}, $now;
-
-    $now++;
-    $header->expires( 'Sat, 07 Jul 2012 05:05:10 GMT' );
-    is $header->expires, $now, 'get expires()';
-    is $header{-expires}, 'Sat, 07 Jul 2012 05:05:10 GMT';
-};
-
 subtest 'each()' => sub {
     %header = ( -foo => 'bar' );
     my @got;
@@ -144,7 +124,12 @@ subtest 'as_hashref()' => sub {
     $header->{Foo} = 'bar';
     is_deeply \%header, { -foo => 'bar' }, 'overload';
 
+    ok exists $header->{Foo};
+    ok !exists $header->{Bar};
+
+    is delete $header->{Foo}, 'bar';
+    is_deeply \%header, {};
+
     untie %{ $header->as_hashref };
     ok !$header->as_hashref, 'untie';
 };
-
