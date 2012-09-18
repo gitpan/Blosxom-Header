@@ -2,20 +2,11 @@ package Blosxom::Header;
 use 5.008_009;
 use strict;
 use warnings;
-use overload '%{}' => 'as_hashref', 'fallback' => 1;
+use parent 'Blosxom::Header::Entity';
 use Exporter 'import';
-use Carp qw/croak carp/;
-use HTTP::Date qw/time2str str2time/;
-use HTTP::Headers::Util qw/split_header_words join_header_words/;
-use List::Util qw/first/;
-use Scalar::Util qw/refaddr/;
+use Carp qw/croak/;
 
-BEGIN {
-    *clear  = \&CLEAR;
-    *exists = \&EXISTS;
-}
-
-our $VERSION = '0.06002';
+our $VERSION = '0.06003';
 
 our @EXPORT_OK = qw(
     header_get    header_set  header_exists
@@ -28,564 +19,25 @@ sub header_exists { __PACKAGE__->instance->exists( @_ ) }
 sub header_delete { __PACKAGE__->instance->delete( @_ ) }
 sub header_iter   { __PACKAGE__->instance->each( @_ )   }
 
-# instance variables
-my ( %adapter_of, %adaptee_of );
+our $INSTANCE;
 
-my $instance;
+sub new { croak "Private method 'new' called for $_[0]" }
+
+sub is_initialized { ref $blosxom::header eq 'HASH' }
+
+sub has_instance { $INSTANCE }
 
 sub instance {
     my $class = shift;
 
     return $class    if ref $class;
-    return $instance if defined $instance;
+    return $INSTANCE if defined $INSTANCE;
 
-    if ( $class->is_initialized ) {
-        my $self = tie my %adapter => $class => $blosxom::header;
-        $adapter_of{ refaddr $self } = \%adapter;
-        return $instance = $self;
+    if ( ref $blosxom::header eq 'HASH' ) {
+        return $INSTANCE = $class->SUPER::new( $blosxom::header );
     }
 
-    croak q{$blosxom::header hasn't been initialized yet};
-}
-
-sub new { shift->instance }
-
-sub has_instance { $instance }
-
-sub is_initialized { ref $blosxom::header eq 'HASH' }
-
-sub as_hashref { $adapter_of{ refaddr shift } }
-
-sub get {
-    my ( $self, @fields ) = @_;
-    my @values = map { $self->FETCH($_) } @fields;
-    wantarray ? @values : $values[0];
-}
-
-sub set {
-    my ( $self, @headers ) = @_;
-
-    return unless @headers;
-    
-    if ( @headers % 2 == 0 ) {
-        while ( my ($field, $value) = splice @headers, 0, 2 ) {
-            $self->STORE( $field => $value );
-        }
-    }
-    else {
-        carp 'Odd number of elements passed to set()';
-    }
-
-    return;
-}
-
-sub delete {
-    my ( $self, @fields ) = @_;
-
-    return unless @fields;
-
-    if ( wantarray ) {
-        return map { $self->DELETE($_) } @fields;
-    }
-    elsif ( defined wantarray ) {
-        my $deleted = $self->DELETE( pop @fields );
-        $self->DELETE( $_ ) for @fields;
-        return $deleted;
-    }
-    else {
-        $self->DELETE( $_ ) for @fields;
-    }
-
-    return;
-}
-
-sub each {
-    my ( $self, $callback ) = @_;
-
-    if ( ref $callback eq 'CODE' ) {
-        for my $field ( $self->field_names ) {
-            $callback->( $field, $self->FETCH($field) );
-        }
-    }
-    else {
-        croak 'Must provide a code reference to each()';
-    }
-
-    return;
-}
-
-sub flatten {
-    my $self = shift;
-    map { $_, $self->FETCH($_) } $self->field_names;
-}
-
-sub is_empty { not shift->SCALAR }
-
-sub charset {
-    my $self = shift;
-
-    my %param = do {
-        my $content_type = $self->FETCH( 'Content-Type' );
-        my ( $param ) = split_header_words( $content_type );
-        return unless $param;
-        splice @{ $param }, 0, 2;
-        @{ $param };
-    };
-
-    if ( my $charset = $param{charset} ) {
-        $charset =~ s/^\s+//;
-        $charset =~ s/\s+$//;
-        return uc $charset;
-    }
-
-    return;
-}
-
-sub content_type {
-    my $self = shift;
-
-    if ( @_ ) {
-        my $content_type = shift;
-        $self->STORE( Content_Type => $content_type );
-        return;
-    }
-
-    my ( $media_type, $rest ) = do {
-        my $content_type = $self->FETCH( 'Content-Type' );
-        return q{} unless defined $content_type;
-        split /;\s*/, $content_type, 2;
-    };
-
-    $media_type =~ s/\s+//g;
-    $media_type = lc $media_type;
-
-    wantarray ? ($media_type, $rest) : $media_type;
-}
-
-sub type { shift->content_type( @_ ) }
-
-my %norm_of = (
-    -attachment => q{},        -charset       => q{},
-    -cookie     => q{},        -nph           => q{},
-    -set_cookie => q{-cookie}, -target        => q{},
-    -type       => q{},        -window_target => q{-target},
-);
-
-my $normalize = sub {
-    my $self  = shift;
-    my $field = lc shift;
-
-    # transliterate dashes into underscores
-    $field =~ tr{-}{_};
-
-    # add an initial dash
-    $field = "-$field";
-
-    exists $norm_of{$field} ? $norm_of{ $field } : $field;
-};
-
-my %field_name_of = (
-    -attachment => 'Content-Disposition', -cookie => 'Set-Cookie',
-    -p3p        => 'P3P',                 -target => 'Window-Target',
-    -type       => 'Content-Type',
-);
-
-my $denormalize = sub {
-    my ( $self, $norm ) = @_;
-
-    unless ( exists $field_name_of{$norm} ) {
-        ( my $field = $norm ) =~ s/^-//;
-        $field =~ tr/_/-/;
-        $field_name_of{ $norm } = ucfirst $field;
-    }
-
-    $field_name_of{ $norm };
-};
-
-# constructor
-sub TIEHASH {
-    my $self = bless \do { my $anon_scalar }, shift;
-    $adaptee_of{ refaddr $self } = shift;
-    $self;
-}
-
-sub FETCH {
-    my $self   = shift;
-    my $norm   = $self->$normalize( shift );
-    my $header = $adaptee_of{ refaddr $self };
-
-    if ( $norm eq '-content_type' ) {
-        my $type    = $header->{-type};
-        my $charset = $header->{-charset};
-
-        if ( defined $type and $type eq q{} ) {
-            undef $charset;
-            undef $type;
-        }
-        else {
-            $type ||= 'text/html';
-
-            if ( $type =~ /\bcharset\b/ ) {
-                undef $charset;
-            }
-            elsif ( !defined $charset ) {
-                $charset = 'ISO-8859-1';
-            }
-        }
-
-        return $charset ? "$type; charset=$charset" : $type;
-    }
-    elsif ( $norm eq '-content_disposition' ) {
-        if ( my $attachment = $header->{-attachment} ) {
-            return qq{attachment; filename="$attachment"};
-        }
-    }
-    elsif ( $norm eq '-date' ) {
-        if ( $self->_date_header_is_fixed ) {
-            return time2str( time );
-        }
-    }
-    elsif ( $norm eq '-p3p' ) {
-        if ( my $p3p = $header->{-p3p} ) {
-            my $tags = ref $p3p eq 'ARRAY' ? join ' ', @{ $p3p } : $p3p;
-            return qq{policyref="/w3c/p3p.xml", CP="$tags"};
-        }
-        else {
-            return;
-        }
-    }
-
-    $header->{ $norm };
-}
-
-sub STORE {
-    my $self   = shift;
-    my $norm   = $self->$normalize( shift );
-    my $value  = shift;
-    my $header = $adaptee_of{ refaddr $self };
-
-    if ( $norm eq '-date' and $self->_date_header_is_fixed ) {
-        return carp( 'The Date header is fixed' );
-    }
-    elsif ( $norm eq '-content_type' ) {
-        my ( $params ) = split_header_words( $value );
-        my @media_type = splice @{ $params }, 0, 2;
-        my %param = @{ $params };
-        $header->{-charset} = delete $param{charset} || q{};
-        $header->{-type} = join_header_words( @media_type, %param );
-        return;
-    }
-    elsif ( $norm eq '-content_disposition' ) {
-        delete $header->{-attachment};
-    }
-    elsif ( $norm eq '-expires' or $norm eq '-cookie' ) {
-        delete $header->{-date};
-    }
-    elsif ( $norm eq '-p3p' ) {
-        return;
-    }
-
-    $header->{ $norm } = $value;
-
-    return;
-}
-
-sub DELETE {
-    my $self    = shift;
-    my $field   = shift;
-    my $norm    = $self->$normalize( $field );
-    my $deleted = defined wantarray && $self->FETCH( $field );
-    my $header  = $adaptee_of{ refaddr $self };
-
-    if ( $norm eq '-date' and $self->_date_header_is_fixed ) {
-        return carp( 'The Date header is fixed' );
-    }
-    elsif ( $norm eq '-content_type' ) {
-        delete $header->{-charset};
-        $header->{-type} = q{};
-    }
-    elsif ( $norm eq '-content_disposition' ) {
-        delete $header->{-attachment};
-    }
-
-    delete $header->{ $norm };
-
-    $deleted;
-}
-
-sub CLEAR {
-    my $self = shift;
-    my $header = $adaptee_of{ refaddr $self };
-    %{ $header } = ( -type => q{} );
-}
-
-sub EXISTS {
-    my $self   = shift;
-    my $norm   = $self->$normalize( shift );
-    my $header = $adaptee_of{ refaddr $self };
-
-    if ( $norm eq '-content_type' ) {
-        return !defined $header->{-type} || $header->{-type} ne q{};
-    }
-    elsif ( $norm eq '-content_disposition' ) {
-        return 1 if $header->{-attachment};
-    }
-    elsif ( $norm eq '-date' ) {
-        return 1 if first { $header->{$_} } qw(-nph -expires -cookie);
-    }
-
-    $header->{ $norm };
-}
-
-sub SCALAR {
-    my $self = shift;
-    my $header = $adaptee_of{ refaddr $self };
-    !defined $header->{-type} || first { $_ } values %{ $header };
-}
-
-sub UNTIE {
-    my $self = shift;
-    delete $adapter_of{ refaddr $self };
-    return;
-}
-
-sub DESTROY {
-    my $self = shift;
-    my $this = refaddr $self;
-    delete $adapter_of{ $this };
-    delete $adaptee_of{ $this };
-    return;
-}
-
-sub field_names {
-    my $self   = shift;
-    my $header = $adaptee_of{ refaddr $self };
-    my %header = %{ $header };
-
-    my @fields;
-
-    push @fields, 'Status'        if delete $header{-status};
-    push @fields, 'Window-Target' if delete $header{-target};
-    push @fields, 'P3P'           if delete $header{-p3p};
-
-    push @fields, 'Set-Cookie' if my $cookie  = delete $header{-cookie};
-    push @fields, 'Expires'    if my $expires = delete $header{-expires};
-    push @fields, 'Date' if delete $header{-nph} or $cookie or $expires;
-
-    push @fields, 'Content-Disposition' if delete $header{-attachment};
-
-    # not ordered
-    my $type = delete @header{qw/-charset -type/};
-    while ( my ($norm, $value) = CORE::each %header ) {
-        push @fields, $self->$denormalize( $norm ) if $value;
-    }
-
-    push @fields, 'Content-Type' if !defined $type or $type ne q{};
-
-    @fields;
-}
-
-sub attachment {
-    my $self = shift;
-    my $header = $adaptee_of{ refaddr $self };
-    $header->{-attachment} = shift if @_;
-    $header->{-attachment};
-}
-
-sub date {
-    my $self   = shift;
-    my $time   = shift;
-    my $header = $adaptee_of{ refaddr $self };
-
-    if ( defined $time ) {
-        $self->STORE( Date => time2str($time) );
-    }
-    elsif ( $self->_date_header_is_fixed ) {
-        return time;
-    }
-    elsif ( my $date = $header->{-date} ) {
-        return str2time( $date );
-    }
-
-    return;
-}
-
-sub expires {
-    my $self   = shift;
-    my $header = $adaptee_of{ refaddr $self };
-
-    require CGI::Util;
-
-    if ( @_ ) {
-        $header->{-expires} = shift;
-    }
-    elsif ( my $expires = $header->{-expires} ) {
-        my $date = CGI::Util::expires( $expires );
-        return str2time( $date );
-    }
-
-    return;
-}
-
-sub last_modified {
-    my $self   = shift;
-    my $time   = shift;
-    my $header = $adaptee_of{ refaddr $self };
-
-    if ( defined $time ) {
-        $header->{-last_modified} = time2str( $time );
-    }
-    elsif ( my $date = $header->{-last_modified} ) {
-        return str2time( $date );
-    }
-
-    return;
-}
-
-sub nph {
-    my $self   = shift;
-    my $header = $adaptee_of{ refaddr $self };
-    
-    if ( @_ ) {
-        my $nph = shift;
-        delete $header->{-date} if $nph;
-        $header->{-nph} = $nph;
-    }
-    else {
-        return $header->{-nph};
-    }
-
-    return;
-}
-
-sub p3p_tags {
-    my $self   = shift;
-    my $header = $adaptee_of{ refaddr $self };
-
-    if ( @_ ) {
-        my @tags = @_ > 1 ? @_ : split / /, shift;
-        $header->{-p3p} = @tags > 1 ? \@tags : $tags[0];
-    }
-    elsif ( my $tags = $header->{-p3p} ) {
-        my @tags = ref $tags eq 'ARRAY' ? @{ $tags } : split / /, $tags;
-        return wantarray ? @tags : $tags[0];
-    }
-
-    return;
-}
-
-sub push_p3p_tags {
-    my ( $self, @tags ) = @_;
-
-    if ( @tags ) {
-        my $header = $adaptee_of{ refaddr $self };
-
-        if ( my $tags = $header->{-p3p} ) {
-            return push @{ $tags }, @tags if ref $tags eq 'ARRAY';
-            unshift @tags, $tags;
-        }
-
-        $header->{-p3p} = @tags > 1 ? \@tags : $tags[0];
-
-        return scalar @tags;
-    }
-
-    return;
-}
-
-sub set_cookie {
-    my $self   = shift;
-    my $name   = shift;
-    my $value  = shift;
-    my $header = $adaptee_of{ refaddr $self };
-
-    require CGI::Cookie;
-
-    my $new_cookie = CGI::Cookie->new(do {
-        my %args = ref $value eq 'HASH' ? %{ $value } : ( value => $value );
-        $args{name} = $name;
-        \%args;
-    });
-
-    my @cookies;
-    if ( my $cookies = $header->{-cookie} ) {
-        @cookies = ref $cookies eq 'ARRAY' ? @{ $cookies } : $cookies;
-        for my $cookie ( @cookies ) {
-            if ( ref $cookie eq 'CGI::Cookie' and $cookie->name eq $name ) {
-                $cookie = $new_cookie;
-                undef $new_cookie;
-                last;
-            }
-        }
-    }
-
-    push @cookies, $new_cookie if $new_cookie;
-
-    $header->{-cookie} = @cookies > 1 ? \@cookies : $cookies[0];
-
-    return;
-}
-
-sub get_cookie {
-    my $self   = shift;
-    my $name   = shift;
-    my $cookie = $adaptee_of{ refaddr $self }->{-cookie};
-
-    my @values = grep {
-        ref $_ eq 'CGI::Cookie' and $_->name eq $name
-    } (
-        ref $cookie eq 'ARRAY' ? @{ $cookie } : $cookie,
-    );
-
-    wantarray ? @values : $values[0];
-}
-
-sub status {
-    my $self   = shift;
-    my $header = $adaptee_of{ refaddr $self };
-
-    require HTTP::Status;
-
-    if ( @_ ) {
-        my $code = shift;
-        my $message = HTTP::Status::status_message( $code );
-        return $header->{-status} = "$code $message" if $message;
-        carp "Unknown status code '$code' passed to status()";
-    }
-    elsif ( my $status = $header->{-status} ) {
-        return substr( $status, 0, 3 );
-    }
-
-    return;
-}
-
-sub target {
-    my $self = shift;
-    my $header = $adaptee_of{ refaddr $self };
-    $header->{-target} = shift if @_;
-    $header->{-target};
-}
-
-*_normalize   = $normalize;
-*_denormalize = $denormalize;
-
-sub _date_header_is_fixed {
-    my $header = $adaptee_of{ refaddr shift };
-    $header->{-expires} || $header->{-cookie} || $header->{-nph};
-}
-
-sub dump {
-    my $self = shift;
-
-    require Data::Dumper;
-
-    local $Data::Dumper::Terse  = 1;
-    local $Data::Dumper::Indent = 1;
-
-    Data::Dumper::Dumper({
-        adaptee => $adaptee_of{ refaddr $self },
-        adapter => { $self->flatten },
-    });
+    croak "$class hasn't been initialized yet";
 }
 
 1;
@@ -663,7 +115,9 @@ this module extends Blosxom without rewriting C<blosxom.cgi>.
 =item $header = Blosxom::Header->instance
 
 Returns a current Blosxom::Header object instance or create a new one.
-C<new()> is an alias.
+
+C<new()> isn't an alias, any more. C<new()> become a private method
+since 0.06003.
 
 =item $header = Blosxom::Header->has_instance
 
@@ -719,7 +173,7 @@ In an exceptional case, $value may be a reference to an array.
 
 Returns a Boolean value telling whether the specified HTTP header exists.
 
-  if ( $header->exists( 'ETag' ) ) {
+  if ( $header->exists('ETag') ) {
       ....
   }
 
@@ -836,7 +290,11 @@ Overwrites existent cookie.
 Returns a L<CGI::Cookie> object whose C<name()> is stringwise equal to C<$name>.
 
   my $id = $header->get_cookie( 'ID' ); # CGI::Cookie object
-  my $value = $id->value; # 123456
+
+  my $value   = $id->value;   # '123456'
+  my $path    = $id->path;    # '/'
+  my $domain  = $id->domain;  # '.example.com'
+  my $expires = $id->expires; # 'Thu, 25 Apr 1999 00:40:33 GMT'
 
 =back
 
@@ -981,6 +439,8 @@ In this case, the outgoing header will be formatted as:
 
 =item $header->push_p3p_tags( @tags )
 
+This method is obsolete and will be removed in 0.07.
+
 Adds P3P tags to the P3P header.
 Accepts a list of P3P tags.
 
@@ -1061,6 +521,22 @@ A shortcut for
 
 =back
 
+=head1 EXAMPLES
+
+The following script is a Blosxom plugin which just adds the Content-Length
+header to CGI response headers.
+
+  package content_length;
+  use strict;
+  use warnings;
+  use Blosxom::Header qw/header_set/;
+
+  sub start { !$blosxom::static_entries }
+
+  sub last { header_set( 'Content-Length' => length $blosxom::output ) }
+
+  1;
+
 =head1 LIMITATIONS
 
 Each header field is restricted to appear only once,
@@ -1114,6 +590,17 @@ See C<< Blosxom::Header->is_initialized() >>.
 =item Unknown status code '%d%d%d' passed to status()
 
 The given status code is unknown to L<HTTP::Status>.
+
+=item The Date header is fixed
+
+You attempted to C<set()> or C<delete()> the Date header
+when the Date header was fixed. See L<"LIMITATIONS">.
+
+=item Can't assign to '%s' directly, use accessors instead
+
+You attempted to C<set()> the Expires or P3P header.
+You can't assign any values to these headers directly.
+Use L<expires()> or L<p3p_tags()> instead.
 
 =back
 

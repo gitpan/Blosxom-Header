@@ -1,17 +1,10 @@
 use strict;
 use warnings;
-use CGI qw/header/;
+use Blosxom::Header::Entity;
+use CGI;
 use Test::More tests => 2;
 
-my %header;
-
-{
-    package blosxom;
-    our $header = \%header;
-}
-
-package CGI::Header;
-use base 'Blosxom::Header';
+package Blosxom::Header::Entity;
 
 sub as_string {
     my $self = shift;
@@ -27,17 +20,18 @@ sub as_string {
 
 package main;
 
-my $header = CGI::Header->new;
-is $header->as_string, header( $blosxom::header );
+my $header = Blosxom::Header::Entity->new;
 
-%header = (
+is $header->as_string, CGI::header( $header->header );
+
+%{ $header->header } = (
     -type       => 'text/plain',
     -charset    => 'utf-8',
     -attachment => 'genome.jpg',
-    -p3p        => [qw/CAO DSP LAW CURa/],
     -target     => 'ResultsWindow',
-    -foo        => 'bar',
+    -foo_bar    => 'baz',
     -status     => '304 Not Modified',
     -cookie     => 'ID=123456; path=/',
 );
-is $header->as_string, header( $blosxom::header );
+
+is $header->as_string, CGI::header( $header->header );

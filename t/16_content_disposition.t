@@ -1,9 +1,9 @@
 use strict;
-use Blosxom::Header;
+use Blosxom::Header::Adapter;
 use Test::More tests => 18;
 
 my %adaptee;
-my $adapter = tie my %adapter => 'Blosxom::Header' => \%adaptee;
+my $adapter = tie my %adapter, 'Blosxom::Header::Adapter', \%adaptee;
 
 %adaptee = ( -attachment => 'genome.jpg' );
 is $adapter{Content_Disposition}, 'attachment; filename="genome.jpg"';

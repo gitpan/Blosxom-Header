@@ -1,10 +1,10 @@
 use strict;
-use Blosxom::Header;
+use Blosxom::Header::Adapter;
 use Test::Base;
 
 plan tests => 1 * blocks();
 
-my $header = 'Blosxom::Header';
+my $header = 'Blosxom::Header::Adapter';
 
 run {
     my $block = shift;
